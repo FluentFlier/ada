@@ -303,7 +303,8 @@ ada/
 │
 ├── stores/
 │   ├── auth.ts                        ← Auth state (Zustand)
-│   └── items.ts                       ← Items + realtime (Zustand)
+│   ├── items.ts                       ← Items + realtime (Zustand)
+│   └── actions.ts                     ← Actions state (Zustand)
 │
 ├── types/
 │   ├── item.ts                        ← Item, Category, ContentType
@@ -312,15 +313,13 @@ ada/
 │
 ├── constants/
 │   ├── categories.ts                  ← 12 categories with icons/colors/keywords
-│   └── config.ts                      ← App config, API URLs, rate limits
+│   ├── config.ts                      ← App config, API URLs, rate limits
+│   ├── actions.ts                     ← Action type definitions
+│   └── theme.ts                       ← Colors, spacing, typography
 │
 ├── utils/
 │   ├── url-patterns.ts                ← URL → quick category mapping
 │   └── format.ts                      ← Date, text formatting
-│
-├── hooks/
-│   ├── useItems.ts                    ← Items hook with realtime
-│   └── useAuth.ts                     ← Auth convenience hook
 │
 ├── share-extension/
 │   └── index.tsx                      ← Share extension entry point
@@ -329,10 +328,20 @@ ada/
 │   ├── classify/index.ts             ← Gemini classification pipeline
 │   └── summarize/index.ts            ← On-demand summarization
 │
-├── __tests__/                         ← Test files
+├── __tests__/                         ← Test files (13 files)
 │   ├── classifier.test.ts
 │   ├── url-patterns.test.ts
-│   └── format.test.ts
+│   ├── format.test.ts
+│   ├── insforge-service.test.ts
+│   ├── insforge-queries.test.ts
+│   ├── share-handler.test.ts
+│   ├── auth-store.test.ts
+│   ├── items-store.test.ts
+│   ├── actions-store.test.ts
+│   ├── actions.test.ts
+│   ├── categories.test.ts
+│   ├── classify-edge.test.ts
+│   └── summarize-edge.test.ts
 │
 └── assets/
     ├── icon.png
