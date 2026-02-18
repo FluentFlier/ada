@@ -1,5 +1,5 @@
 /**
- * Onboarding — sign in or sign up.
+ * Onboarding — sign in, sign up, or verify email.
  */
 
 import { useState } from 'react';
@@ -16,22 +16,74 @@ import {
 import { useAuthStore } from '@/stores/auth';
 
 export default function OnboardingScreen() {
+  const {
+    signIn,
+    signUp,
+    verifyEmail,
+    resendCode,
+    resetVerification,
+    loading,
+    error,
+    clearError,
+    needsEmailVerification,
+    pendingEmail,
+  } = useAuthStore();
+
+  if (needsEmailVerification) {
+    return (
+      <VerifyStep
+        email={pendingEmail ?? ''}
+        loading={loading}
+        error={error}
+        onVerify={verifyEmail}
+        onResend={resendCode}
+        onBack={resetVerification}
+        onClearError={clearError}
+      />
+    );
+  }
+
+  return (
+    <AuthStep
+      loading={loading}
+      error={error}
+      onSignIn={signIn}
+      onSignUp={signUp}
+      onClearError={clearError}
+    />
+  );
+}
+
+// ─── Auth Step ───────────────────────────────────────────────────────
+
+function AuthStep({
+  loading,
+  error,
+  onSignIn,
+  onSignUp,
+  onClearError,
+}: {
+  loading: boolean;
+  error: string | null;
+  onSignIn: (email: string, password: string) => Promise<void>;
+  onSignUp: (email: string, password: string) => Promise<void>;
+  onClearError: () => void;
+}) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { signIn, signUp, loading, error, clearError } = useAuthStore();
 
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) return;
     if (isSignUp) {
-      await signUp(email.trim(), password);
+      await onSignUp(email.trim(), password);
     } else {
-      await signIn(email.trim(), password);
+      await onSignIn(email.trim(), password);
     }
   };
 
   const toggleMode = () => {
-    clearError();
+    onClearError();
     setIsSignUp((prev) => !prev);
   };
 
@@ -96,6 +148,91 @@ export default function OnboardingScreen() {
   );
 }
 
+// ─── Verify Step ─────────────────────────────────────────────────────
+
+function VerifyStep({
+  email,
+  loading,
+  error,
+  onVerify,
+  onResend,
+  onBack,
+  onClearError,
+}: {
+  email: string;
+  loading: boolean;
+  error: string | null;
+  onVerify: (code: string) => Promise<void>;
+  onResend: () => Promise<void>;
+  onBack: () => void;
+  onClearError: () => void;
+}) {
+  const [code, setCode] = useState('');
+
+  const handleVerify = async () => {
+    if (code.trim().length < 6) return;
+    onClearError();
+    await onVerify(code.trim());
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <View style={styles.header}>
+        <Text style={styles.logo}>Verify Email</Text>
+        <Text style={styles.tagline}>
+          We sent a 6-digit code to {email}
+        </Text>
+      </View>
+
+      <View style={styles.form}>
+        <TextInput
+          style={[styles.input, styles.codeInput]}
+          placeholder="Enter 6-digit code"
+          placeholderTextColor="#6B7280"
+          value={code}
+          onChangeText={setCode}
+          keyboardType="number-pad"
+          maxLength={6}
+          autoFocus
+        />
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <Pressable
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleVerify}
+          disabled={loading || code.trim().length < 6}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <Text style={styles.buttonText}>Verify</Text>
+          )}
+        </Pressable>
+
+        <Pressable
+          onPress={onResend}
+          style={styles.toggle}
+          disabled={loading}
+        >
+          <Text style={styles.toggleText}>Resend code</Text>
+        </Pressable>
+
+        <Pressable onPress={onBack} style={styles.toggle}>
+          <Text style={[styles.toggleText, { color: '#6B7280' }]}>
+            Back to sign in
+          </Text>
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -117,6 +254,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#9CA3AF',
     marginTop: 8,
+    textAlign: 'center',
   },
   form: {
     gap: 16,
@@ -129,6 +267,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#2A2A3A',
+  },
+  codeInput: {
+    textAlign: 'center',
+    fontSize: 24,
+    letterSpacing: 8,
+    fontWeight: '600',
   },
   error: {
     color: '#EF4444',

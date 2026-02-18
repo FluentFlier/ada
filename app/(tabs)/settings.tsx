@@ -1,13 +1,33 @@
 /**
- * Settings — account info, sign out.
+ * Settings — account info, item stats, sign out.
  */
 
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/auth';
+import { useItemsStore } from '@/stores/items';
 import { CONFIG } from '@/constants/config';
 
 export default function SettingsScreen() {
-  const { user, signOut, loading } = useAuthStore();
+  const router = useRouter();
+  const { user, signOut, loading, error } = useAuthStore();
+  const items = useItemsStore((s) => s.items);
+
+  const totalItems = items.length;
+  const classifiedItems = items.filter(
+    (i) => i.status === 'classified',
+  ).length;
+  const archivedItems = items.filter(
+    (i) => i.status === 'archived',
+  ).length;
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch {
+      Alert.alert('Error', 'Failed to sign out. Please try again.');
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -15,7 +35,23 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>Account</Text>
         <View style={styles.row}>
           <Text style={styles.label}>Email</Text>
-          <Text style={styles.value}>{user?.email ?? '—'}</Text>
+          <Text style={styles.value}>{user?.email ?? '---'}</Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Stats</Text>
+        <View style={styles.row}>
+          <Text style={styles.label}>Total Items</Text>
+          <Text style={styles.value}>{totalItems}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.label}>Classified</Text>
+          <Text style={styles.value}>{classifiedItems}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.label}>Archived</Text>
+          <Text style={styles.value}>{archivedItems}</Text>
         </View>
       </View>
 
@@ -31,9 +67,24 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Help</Text>
+        <Pressable
+          style={styles.row}
+          onPress={() => router.push('/setup-guide')}
+        >
+          <Text style={styles.label}>How to Share</Text>
+          <Text style={styles.value}>→</Text>
+        </Pressable>
+      </View>
+
+      {error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : null}
+
       <Pressable
         style={[styles.signOut, loading && styles.disabled]}
-        onPress={signOut}
+        onPress={handleSignOut}
         disabled={loading}
       >
         <Text style={styles.signOutText}>Sign Out</Text>
@@ -61,6 +112,12 @@ const styles = StyleSheet.create({
   },
   label: { fontSize: 15, color: '#FFF' },
   value: { fontSize: 15, color: '#9CA3AF' },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
   signOut: {
     backgroundColor: '#1A1A24',
     padding: 16,

@@ -1,12 +1,15 @@
 /**
  * Library — browse items filtered by category.
+ * Supports pull-to-refresh and category filtering.
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, Pressable, ScrollView, StyleSheet,
+  View, Text, FlatList, Pressable, ScrollView,
+  RefreshControl, StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useAuthStore } from '@/stores/auth';
 import { useItemsStore } from '@/stores/items';
 import { CATEGORY_LIST, getCategoryDef } from '@/constants/categories';
 import { truncate, timeAgo } from '@/utils/format';
@@ -14,16 +17,31 @@ import type { Category, Item } from '@/types/item';
 
 export default function LibraryScreen() {
   const router = useRouter();
-  const items = useItemsStore((s) => s.items);
-  const [activeCategory, setActiveCategory] = useState<Category | null>(
-    null,
-  );
+  const user = useAuthStore((s) => s.user);
+  const { items, loading, fetchItems } = useItemsStore();
+  const { getStarred } = useItemsStore();
+  const [activeFilter, setActiveFilter] = useState<
+    Category | 'starred' | null
+  >(null);
 
-  const filtered = activeCategory
-    ? items.filter(
-        (i) => i.category === activeCategory && i.status !== 'archived',
-      )
-    : items.filter((i) => i.status !== 'archived');
+  const filtered =
+    activeFilter === 'starred'
+      ? getStarred()
+      : activeFilter
+        ? items.filter(
+            (i) =>
+              i.category === activeFilter &&
+              i.status !== 'archived',
+          )
+        : items.filter((i) => i.status !== 'archived');
+
+  const classifiedCount = items.filter(
+    (i) => i.status === 'classified',
+  ).length;
+
+  const onRefresh = useCallback(() => {
+    if (user) fetchItems(user.id);
+  }, [user, fetchItems]);
 
   const renderItem = ({ item }: { item: Item }) => {
     const cat = getCategoryDef(item.category);
@@ -47,6 +65,15 @@ export default function LibraryScreen() {
     );
   };
 
+  const emptyMessage =
+    activeFilter === 'starred'
+      ? 'No starred items yet'
+      : activeFilter
+        ? `No items in ${getCategoryDef(activeFilter).label} yet`
+        : classifiedCount === 0
+          ? 'Items will appear here after classification'
+          : 'No items to show';
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -55,16 +82,36 @@ export default function LibraryScreen() {
         contentContainerStyle={styles.filters}
       >
         <Pressable
-          style={[styles.pill, !activeCategory && styles.pillActive]}
-          onPress={() => setActiveCategory(null)}
+          style={[styles.pill, !activeFilter && styles.pillActive]}
+          onPress={() => setActiveFilter(null)}
         >
           <Text
             style={[
               styles.pillText,
-              !activeCategory && styles.pillTextActive,
+              !activeFilter && styles.pillTextActive,
             ]}
           >
             All
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[
+            styles.pill,
+            activeFilter === 'starred' && styles.pillStarred,
+          ]}
+          onPress={() =>
+            setActiveFilter(
+              activeFilter === 'starred' ? null : 'starred',
+            )
+          }
+        >
+          <Text
+            style={[
+              styles.pillText,
+              activeFilter === 'starred' && styles.pillTextStarred,
+            ]}
+          >
+            Starred
           </Text>
         </Pressable>
         {CATEGORY_LIST.filter((c) => c.id !== 'other').map((cat) => (
@@ -72,18 +119,18 @@ export default function LibraryScreen() {
             key={cat.id}
             style={[
               styles.pill,
-              activeCategory === cat.id && styles.pillActive,
+              activeFilter === cat.id && styles.pillActive,
             ]}
             onPress={() =>
-              setActiveCategory(
-                activeCategory === cat.id ? null : cat.id,
+              setActiveFilter(
+                activeFilter === cat.id ? null : cat.id,
               )
             }
           >
             <Text
               style={[
                 styles.pillText,
-                activeCategory === cat.id && styles.pillTextActive,
+                activeFilter === cat.id && styles.pillTextActive,
               ]}
             >
               {cat.label}
@@ -97,11 +144,16 @@ export default function LibraryScreen() {
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={onRefresh}
+            tintColor="#6366F1"
+          />
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>
-              No items in this category yet
-            </Text>
+            <Text style={styles.emptyText}>{emptyMessage}</Text>
           </View>
         }
       />
@@ -119,8 +171,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A24',
   },
   pillActive: { backgroundColor: '#6366F1' },
+  pillStarred: { backgroundColor: '#F59E0B' },
   pillText: { fontSize: 13, color: '#9CA3AF', fontWeight: '500' },
   pillTextActive: { color: '#FFF' },
+  pillTextStarred: { color: '#FFF' },
   list: { padding: 16, gap: 8 },
   card: {
     flexDirection: 'row',

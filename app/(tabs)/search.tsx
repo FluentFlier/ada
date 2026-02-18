@@ -6,6 +6,7 @@ import { useState } from 'react';
 import {
   View, Text, TextInput, FlatList, Pressable, StyleSheet,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useItemsStore } from '@/stores/items';
 import { getCategoryDef } from '@/constants/categories';
@@ -26,12 +27,19 @@ export default function SearchScreen() {
         style={styles.card}
         onPress={() => router.push(`/item/${item.id}`)}
       >
-        <Text style={styles.title} numberOfLines={1}>
-          {item.title ?? truncate(item.raw_content, 50)}
-        </Text>
-        <Text style={styles.meta}>
-          {cat.label} · {timeAgo(item.created_at)}
-        </Text>
+        <View style={styles.cardRow}>
+          <View style={styles.cardContent}>
+            <Text style={styles.title} numberOfLines={1}>
+              {item.title ?? truncate(item.raw_content, 50)}
+            </Text>
+            <Text style={styles.meta}>
+              {cat.label} · {timeAgo(item.created_at)}
+            </Text>
+          </View>
+          {item.is_starred && (
+            <Ionicons name="star" size={16} color="#F59E0B" />
+          )}
+        </View>
       </Pressable>
     );
   };
@@ -89,8 +97,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A24',
     borderRadius: 10,
     padding: 14,
-    gap: 4,
   },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardContent: { flex: 1, gap: 4 },
   title: { fontSize: 15, fontWeight: '500', color: '#FFF' },
   meta: { fontSize: 12, color: '#6B7280' },
   empty: { alignItems: 'center', paddingTop: 60 },

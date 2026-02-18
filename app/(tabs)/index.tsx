@@ -15,12 +15,24 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth';
 import { useItemsStore } from '@/stores/items';
+import { useActionsStore } from '@/stores/actions';
 import { saveItem, triggerClassify } from '@/services/insforge';
 import { getCategoryDef } from '@/constants/categories';
+import { isLikelyUrl } from '@/utils/url-patterns';
 import { timeAgo, truncate } from '@/utils/format';
-import type { Item } from '@/types/item';
+import type { ContentType, Item } from '@/types/item';
+
+const ACTION_LABELS: Record<string, string> = {
+  add_to_calendar: 'Calendar',
+  set_reminder: 'Remind',
+  save_contact: 'Contact',
+  summarize: 'Summarize',
+  create_note: 'Note',
+  track_price: 'Track',
+};
 
 export default function InboxScreen() {
   const router = useRouter();
@@ -29,9 +41,15 @@ export default function InboxScreen() {
   const [showAddInput, setShowAddInput] = useState(false);
   const [addText, setAddText] = useState('');
 
-  const inboxItems = items.filter(
-    (item) => item.status !== 'archived',
-  );
+  const { toggleStar } = useItemsStore();
+
+  const inboxItems = items
+    .filter((item) => item.status !== 'archived')
+    .sort((a, b) => {
+      if (a.is_starred && !b.is_starred) return -1;
+      if (!a.is_starred && b.is_starred) return 1;
+      return 0;
+    });
 
   const onRefresh = useCallback(() => {
     if (user) fetchItems(user.id);
@@ -40,21 +58,29 @@ export default function InboxScreen() {
   const handleAdd = async () => {
     if (!addText.trim() || !user) return;
 
+    const trimmed = addText.trim();
+    const type: ContentType = isLikelyUrl(trimmed) ? 'link' : 'text';
+
     try {
-      const item = await saveItem(user.id, {
-        type: 'text',
-        content: addText.trim(),
-      });
-      await triggerClassify(item.id);
+      const item = await saveItem(user.id, { type, content: trimmed });
+      triggerClassify(item.id).catch(() => {});
       setAddText('');
       setShowAddInput(false);
+      fetchItems(user.id);
     } catch (err) {
       Alert.alert('Error', 'Failed to save item. Please try again.');
     }
   };
 
+  const { getForItem, executeAndUpdate, dismissAction } =
+    useActionsStore();
+
   const renderItem = ({ item }: { item: Item }) => {
     const cat = getCategoryDef(item.category);
+    const itemActions = getForItem(item.id).filter(
+      (a) => a.status === 'suggested',
+    );
+
     return (
       <Pressable
         style={styles.card}
@@ -68,9 +94,21 @@ export default function InboxScreen() {
               {cat.label}
             </Text>
           </View>
-          {item.status === 'pending' && (
-            <View style={styles.pendingDot} />
-          )}
+          <View style={styles.cardHeaderRight}>
+            {item.status === 'pending' && (
+              <View style={styles.pendingDot} />
+            )}
+            <Pressable
+              onPress={() => toggleStar(item.id)}
+              hitSlop={8}
+            >
+              <Ionicons
+                name={item.is_starred ? 'star' : 'star-outline'}
+                size={18}
+                color={item.is_starred ? '#F59E0B' : '#6B7280'}
+              />
+            </Pressable>
+          </View>
         </View>
 
         <Text style={styles.cardTitle}>
@@ -82,6 +120,37 @@ export default function InboxScreen() {
             {truncate(item.description, 120)}
           </Text>
         ) : null}
+
+        {itemActions.length > 0 && (
+          <View style={styles.actionPills}>
+            {itemActions.slice(0, 2).map((action) => (
+              <View key={action.id} style={styles.actionPillRow}>
+                <Pressable
+                  style={styles.actionPill}
+                  onPress={() => {
+                    executeAndUpdate(action).catch((err: unknown) => {
+                      const msg =
+                        err instanceof Error
+                          ? err.message
+                          : 'Action failed.';
+                      Alert.alert('Action Failed', msg);
+                    });
+                  }}
+                >
+                  <Text style={styles.actionPillText}>
+                    {ACTION_LABELS[action.type] ?? action.type}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => dismissAction(action.id)}
+                  hitSlop={8}
+                >
+                  <Text style={styles.actionDismiss}>x</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.cardMeta}>{timeAgo(item.created_at)}</Text>
       </Pressable>
@@ -166,6 +235,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -221,6 +295,33 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabText: { fontSize: 28, color: '#FFF', fontWeight: '300' },
+  actionPills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  actionPillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  actionPill: {
+    backgroundColor: '#2A2A3A',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  actionPillText: {
+    fontSize: 12,
+    color: '#818CF8',
+    fontWeight: '600',
+  },
+  actionDismiss: {
+    fontSize: 12,
+    color: '#6B7280',
+    paddingHorizontal: 2,
+  },
   addContainer: {
     padding: 16,
     backgroundColor: '#1A1A24',
