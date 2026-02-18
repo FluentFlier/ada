@@ -435,6 +435,7 @@ export function subscribeToItems(
   onUpdate: (item: Item) => void,
 ) {
   const channel = `items:${userId}`;
+  let cancelled = false;
 
   const handleUpdate = (payload: unknown) => {
     const msg = payload as { item?: Item };
@@ -444,6 +445,7 @@ export function subscribeToItems(
   };
 
   insforge.realtime.connect().then(() => {
+    if (cancelled) return;
     insforge.realtime.subscribe(channel);
     insforge.realtime.on('item_updated', handleUpdate);
     insforge.realtime.on('item_created', handleUpdate);
@@ -453,11 +455,21 @@ export function subscribeToItems(
 
   return {
     unsubscribe: () => {
+      cancelled = true;
       insforge.realtime.off('item_updated', handleUpdate);
       insforge.realtime.off('item_created', handleUpdate);
       insforge.realtime.unsubscribe(channel);
     },
   };
+}
+
+/** Disconnect all realtime subscriptions (call on signOut). */
+export function disconnectRealtime() {
+  try {
+    insforge.realtime.disconnect?.();
+  } catch {
+    // Ignore — may not be connected
+  }
 }
 
 // ─── Error Types ─────────────────────────────────────────────────────

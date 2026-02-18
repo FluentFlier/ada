@@ -54,6 +54,8 @@ export default function SearchScreen() {
           value={query}
           onChangeText={setQuery}
           autoCorrect={false}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
         />
       </View>
 
@@ -62,6 +64,8 @@ export default function SearchScreen() {
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           query.length >= 2 ? (
             <View style={styles.empty}>

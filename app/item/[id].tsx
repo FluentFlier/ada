@@ -3,7 +3,7 @@
  * Supports executing actions: calendar, reminders, summarize.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, Pressable, Alert,
   ActivityIndicator, Linking, TextInput, StyleSheet,
@@ -32,6 +32,29 @@ export default function ItemDetailScreen() {
   const [noteText, setNoteText] = useState<string | undefined>(
     undefined,
   );
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const saveNote = useCallback(
+    (text: string | undefined) => {
+      if (!item) return;
+      const val = text?.trim() ?? null;
+      const current = item.user_note ?? null;
+      if (val !== current) {
+        updateNote(item.id, val || null);
+      }
+    },
+    [item, updateNote],
+  );
+
+  // Auto-save note with 1s debounce
+  useEffect(() => {
+    if (noteText === undefined) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => saveNote(noteText), 1000);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [noteText, saveNote]);
 
   const item = items.find((i) => i.id === id);
   const actions = id ? getForItem(id) : [];
@@ -276,11 +299,8 @@ export default function ItemDetailScreen() {
           value={noteText ?? item.user_note ?? ''}
           onChangeText={setNoteText}
           onBlur={() => {
-            const val = noteText?.trim() ?? null;
-            const current = item.user_note ?? null;
-            if (val !== current) {
-              updateNote(item.id, val || null);
-            }
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            saveNote(noteText);
           }}
           multiline
           textAlignVertical="top"

@@ -20,9 +20,9 @@ import { getCategoryDef } from '@/constants/categories';
 import { CONFIG } from '@/constants/config';
 
 export default function ShareExtension(props: InitialProps) {
-  const [status, setStatus] = useState<'loading' | 'saved' | 'error'>(
-    'loading',
-  );
+  const [status, setStatus] = useState<
+    'loading' | 'saved' | 'auth_error' | 'error'
+  >('loading');
   const [categoryHint, setCategoryHint] = useState('');
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function ShareExtension(props: InitialProps) {
     try {
       const user = await getCurrentUser();
       if (!user) {
-        setStatus('error');
+        setStatus('auth_error');
         return;
       }
 
@@ -84,11 +84,19 @@ export default function ShareExtension(props: InitialProps) {
           ) : null}
         </>
       )}
+      {status === 'auth_error' && (
+        <>
+          <RNText style={styles.errorIcon}>✗</RNText>
+          <RNText style={styles.text}>
+            Open Ada to sign in first.
+          </RNText>
+        </>
+      )}
       {status === 'error' && (
         <>
           <RNText style={styles.errorIcon}>✗</RNText>
           <RNText style={styles.text}>
-            Could not save. Open Ada to sign in.
+            Could not save. Please try again.
           </RNText>
         </>
       )}

@@ -14,6 +14,7 @@ import {
   getCurrentUser,
   verifyEmail as apiVerifyEmail,
   resendVerificationEmail as apiResend,
+  disconnectRealtime,
   AuthError,
 } from '@/services/insforge';
 
@@ -187,6 +188,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     set({ loading: true, error: null });
     try {
+      disconnectRealtime();
       await apiSignOut();
       set({ user: null, loading: false });
     } catch (err) {

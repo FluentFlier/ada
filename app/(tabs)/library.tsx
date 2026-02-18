@@ -114,7 +114,7 @@ export default function LibraryScreen() {
             Starred
           </Text>
         </Pressable>
-        {CATEGORY_LIST.filter((c) => c.id !== 'other').map((cat) => (
+        {CATEGORY_LIST.map((cat) => (
           <Pressable
             key={cat.id}
             style={[
