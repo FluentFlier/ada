@@ -16,9 +16,9 @@ import {
   triggerSummarize,
 } from './insforge';
 import type { Action } from '@/types/action';
-import type {
-  CalendarActionData,
-  ReminderActionData,
+import {
+  isCalendarActionData,
+  isReminderActionData,
 } from '@/types/action';
 
 // ─── Calendar ───────────────────────────────────────────────────────
@@ -63,7 +63,12 @@ async function getDefaultCalendarId(): Promise<string> {
 export async function executeCalendarAction(
   action: Action,
 ): Promise<{ eventId: string }> {
-  const data = action.action_data as unknown as CalendarActionData;
+  if (!isCalendarActionData(action.action_data)) {
+    throw new ActionError(
+      'Invalid calendar action data: missing required fields',
+    );
+  }
+  const data = action.action_data;
 
   const calId = await getDefaultCalendarId();
 
@@ -100,7 +105,12 @@ export async function executeReminderAction(
 ): Promise<{ notificationId: string }> {
   await ensureNotificationPermissions();
 
-  const data = action.action_data as unknown as ReminderActionData;
+  if (!isReminderActionData(action.action_data)) {
+    throw new ActionError(
+      'Invalid reminder action data: missing required fields',
+    );
+  }
+  const data = action.action_data;
   const triggerDate = new Date(data.remind_at);
   const now = new Date();
 

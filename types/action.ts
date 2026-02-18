@@ -44,3 +44,29 @@ export interface ReminderActionData {
   remind_at: string;
   urgency: 'low' | 'medium' | 'high' | 'critical';
 }
+
+// ─── Runtime Type Guards ─────────────────────────────────────────────
+
+/**
+ * Validates that unknown data conforms to CalendarActionData.
+ * Required fields: title (string), start_time (string).
+ */
+export function isCalendarActionData(
+  data: unknown,
+): data is CalendarActionData {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  return typeof d.title === 'string' && typeof d.start_time === 'string';
+}
+
+/**
+ * Validates that unknown data conforms to ReminderActionData.
+ * Required fields: message (string), remind_at (string).
+ */
+export function isReminderActionData(
+  data: unknown,
+): data is ReminderActionData {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  return typeof d.message === 'string' && typeof d.remind_at === 'string';
+}

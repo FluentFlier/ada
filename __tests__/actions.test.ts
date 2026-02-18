@@ -50,6 +50,10 @@ import {
   executeSummarizeAction,
   ActionError,
 } from '@/services/actions';
+import {
+  isCalendarActionData,
+  isReminderActionData,
+} from '@/types/action';
 import type { Action } from '@/types/action';
 
 function makeAction(overrides: Partial<Action> = {}): Action {
@@ -406,6 +410,163 @@ describe('actions service', () => {
       const action = makeAction({ type: 'summarize' });
       await expect(executeSummarizeAction(action)).rejects.toThrow(
         'Edge function failed',
+      );
+    });
+  });
+
+  // ─── Type Guard Validation ──────────────────────────────────
+
+  describe('isCalendarActionData', () => {
+    it('returns true for valid calendar data with all fields', () => {
+      const data = {
+        title: 'Meeting',
+        start_time: '2026-03-01T10:00:00Z',
+        end_time: '2026-03-01T11:00:00Z',
+        location: 'Office',
+        description: 'Team sync',
+        all_day: false,
+      };
+      expect(isCalendarActionData(data)).toBe(true);
+    });
+
+    it('returns true for valid calendar data with only required fields', () => {
+      const data = { title: 'Meeting', start_time: '2026-03-01T10:00:00Z' };
+      expect(isCalendarActionData(data)).toBe(true);
+    });
+
+    it('returns false when title is missing', () => {
+      expect(isCalendarActionData({ start_time: '2026-03-01T10:00:00Z' }))
+        .toBe(false);
+    });
+
+    it('returns false when start_time is missing', () => {
+      expect(isCalendarActionData({ title: 'Meeting' })).toBe(false);
+    });
+
+    it('returns false for null', () => {
+      expect(isCalendarActionData(null)).toBe(false);
+    });
+
+    it('returns false for non-object types', () => {
+      expect(isCalendarActionData('string')).toBe(false);
+      expect(isCalendarActionData(42)).toBe(false);
+      expect(isCalendarActionData(undefined)).toBe(false);
+    });
+
+    it('returns false when title is not a string', () => {
+      expect(isCalendarActionData({ title: 123, start_time: 'x' }))
+        .toBe(false);
+    });
+
+    it('returns false when start_time is not a string', () => {
+      expect(isCalendarActionData({ title: 'OK', start_time: 123 }))
+        .toBe(false);
+    });
+  });
+
+  describe('isReminderActionData', () => {
+    it('returns true for valid reminder data', () => {
+      const data = {
+        message: 'Call dentist',
+        remind_at: '2026-03-01T10:00:00Z',
+        urgency: 'high',
+      };
+      expect(isReminderActionData(data)).toBe(true);
+    });
+
+    it('returns true with only required fields', () => {
+      const data = { message: 'Test', remind_at: '2026-03-01T10:00:00Z' };
+      expect(isReminderActionData(data)).toBe(true);
+    });
+
+    it('returns false when message is missing', () => {
+      expect(isReminderActionData({ remind_at: '2026-03-01T10:00:00Z' }))
+        .toBe(false);
+    });
+
+    it('returns false when remind_at is missing', () => {
+      expect(isReminderActionData({ message: 'Test' })).toBe(false);
+    });
+
+    it('returns false for null', () => {
+      expect(isReminderActionData(null)).toBe(false);
+    });
+
+    it('returns false for non-object types', () => {
+      expect(isReminderActionData('string')).toBe(false);
+      expect(isReminderActionData(42)).toBe(false);
+      expect(isReminderActionData(undefined)).toBe(false);
+    });
+  });
+
+  // ─── Invalid action_data Execution Errors ─────────────────────
+
+  describe('invalid action_data throws ActionError', () => {
+    it('throws for calendar action with missing start_time', async () => {
+      vi.mocked(Calendar.requestCalendarPermissionsAsync).mockResolvedValue(
+        { status: 'granted' } as Awaited<
+          ReturnType<typeof Calendar.requestCalendarPermissionsAsync>
+        >,
+      );
+
+      const action = makeAction({
+        type: 'add_to_calendar',
+        action_data: { title: 'Missing start_time' },
+      });
+
+      await expect(executeCalendarAction(action)).rejects.toThrow(
+        ActionError,
+      );
+      await expect(executeCalendarAction(action)).rejects.toThrow(
+        'Invalid calendar action data: missing required fields',
+      );
+    });
+
+    it('throws for calendar action with empty action_data', async () => {
+      const action = makeAction({
+        type: 'add_to_calendar',
+        action_data: {},
+      });
+
+      await expect(executeCalendarAction(action)).rejects.toThrow(
+        'Invalid calendar action data: missing required fields',
+      );
+    });
+
+    it('throws for reminder action with missing remind_at', async () => {
+      vi.mocked(Notifications.getPermissionsAsync).mockResolvedValue(
+        { status: 'granted' } as Awaited<
+          ReturnType<typeof Notifications.getPermissionsAsync>
+        >,
+      );
+
+      const action = makeAction({
+        type: 'set_reminder',
+        action_data: { message: 'Missing remind_at' },
+      });
+
+      await expect(executeReminderAction(action)).rejects.toThrow(
+        ActionError,
+      );
+      await expect(executeReminderAction(action)).rejects.toThrow(
+        'Invalid reminder action data: missing required fields',
+      );
+    });
+
+    it('throws for reminder action with empty action_data', async () => {
+      vi.mocked(Notifications.getPermissionsAsync).mockResolvedValue(
+        { status: 'granted' } as Awaited<
+          ReturnType<typeof Notifications.getPermissionsAsync>
+        >,
+      );
+
+      const action = makeAction({
+        type: 'set_reminder',
+        action_data: {},
+      });
+
+      await expect(executeReminderAction(action)).rejects.toThrow(
+        'Invalid reminder action data: missing required fields',
       );
     });
   });
