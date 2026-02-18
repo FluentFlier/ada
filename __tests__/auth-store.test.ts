@@ -23,6 +23,7 @@ vi.mock('@/services/insforge', () => ({
   getCurrentUser: vi.fn(),
   verifyEmail: vi.fn(),
   resendVerificationEmail: vi.fn(),
+  disconnectRealtime: vi.fn(),
   AuthError: class AuthError extends Error {
     cause: unknown;
     constructor(message: string, cause?: unknown) {

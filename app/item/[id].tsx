@@ -34,6 +34,9 @@ export default function ItemDetailScreen() {
   );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const item = items.find((i) => i.id === id);
+  const actions = id ? getForItem(id) : [];
+
   const saveNote = useCallback(
     (text: string | undefined) => {
       if (!item) return;
@@ -55,9 +58,6 @@ export default function ItemDetailScreen() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [noteText, saveNote]);
-
-  const item = items.find((i) => i.id === id);
-  const actions = id ? getForItem(id) : [];
 
   if (!item) {
     return (
