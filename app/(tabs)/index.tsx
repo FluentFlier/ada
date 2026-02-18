@@ -3,7 +3,7 @@
  * Includes manual "Add" button for POC (before share extension).
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -35,13 +35,19 @@ export default function InboxScreen() {
 
   const { toggleStar } = useItemsStore();
 
-  const inboxItems = items
-    .filter((item) => item.status !== 'archived')
-    .sort((a, b) => {
-      if (a.is_starred && !b.is_starred) return -1;
-      if (!a.is_starred && b.is_starred) return 1;
-      return 0;
-    });
+  const inboxItems = useMemo(
+    () =>
+      items
+        .filter((item) => item.status !== 'archived')
+        .sort((a, b) => {
+          if (a.is_starred !== b.is_starred) return a.is_starred ? -1 : 1;
+          return (
+            new Date(b.created_at).getTime() -
+            new Date(a.created_at).getTime()
+          );
+        }),
+    [items],
+  );
 
   const onRefresh = useCallback(() => {
     if (user) fetchItems(user.id);

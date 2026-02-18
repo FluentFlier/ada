@@ -208,7 +208,6 @@ interface ClassificationResult {
     data: Record<string, unknown>;
     priority: number;
   }>;
-  tags: string[];
 }
 
 const CLASSIFY_PROMPT = `You are Ada, an AI personal secretary. Classify this content.
@@ -231,18 +230,25 @@ Respond with ONLY valid JSON matching this exact structure:
   },
   "suggested_actions": [
     {
-      "type": "add_to_calendar|set_reminder|save_contact|summarize|create_note|track_price",
+      "type": "add_to_calendar|set_reminder|summarize",
       "label": "human-readable action label",
-      "data": {},
+      "data": { ... see schemas below ... },
       "priority": 1-3
     }
-  ],
-  "tags": ["relevant", "tags"]
+  ]
 }
+
+Action data schemas (MUST match exactly):
+- add_to_calendar: {"title": "event title", "start_time": "ISO 8601", "end_time": "ISO 8601 or omit for 1hr default", "location": "optional", "description": "optional", "all_day": false}
+- set_reminder: {"message": "reminder text", "remind_at": "ISO 8601 future date", "urgency": "low|medium|high|critical"}
+- summarize: {} (no data needed)
 
 Rules:
 - Extract ALL structured data (dates, prices, contacts, locations)
-- Suggest 1-3 actions that would be most useful
+- Only suggest actions of type: add_to_calendar, set_reminder, summarize
+- Suggest add_to_calendar when dates/events are found (include start_time!)
+- Suggest set_reminder when deadlines or urgency detected (include remind_at!)
+- Suggest summarize for long-form content (articles, papers, emails)
 - If content has a deadline within 7 days, urgency should be "high" or "critical"
 - Confidence should reflect how certain you are about the category
 - Keep title concise and informative
@@ -306,7 +312,6 @@ async function classifyWithAI(
       description: '',
       extracted_data: {},
       suggested_actions: [],
-      tags: [],
     };
   }
 }

@@ -51,11 +51,15 @@ export const useActionsStore = create<ActionsState>((set, get) => ({
   executeAndUpdate: async (action: Action) => {
     const prev = get().actions;
 
-    // Optimistic: mark as completed
+    // Optimistic: summarize goes to 'approved' (server confirms later),
+    // everything else goes to 'completed' immediately
+    const optimisticStatus: ActionStatus =
+      action.type === 'summarize' ? 'approved' : 'completed';
+
     set((state) => ({
       actions: state.actions.map((a) =>
         a.id === action.id
-          ? { ...a, status: 'completed' as ActionStatus }
+          ? { ...a, status: optimisticStatus }
           : a,
       ),
     }));
@@ -63,7 +67,6 @@ export const useActionsStore = create<ActionsState>((set, get) => ({
     try {
       await executeAction(action);
     } catch (err) {
-      console.error('Execute action failed, rolling back:', err);
       set({ actions: prev });
       throw err;
     }
