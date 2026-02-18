@@ -7,6 +7,7 @@ import {
   getActionsForUser,
   updateActionStatus,
   DatabaseError,
+  DEFAULT_PAGE_LIMIT,
 } from '@/services/insforge';
 import { executeAction } from '@/services/actions';
 import type { Action, ActionStatus } from '@/types/action';
@@ -18,8 +19,10 @@ interface ActionsState {
   actions: ActionWithItem[];
   loading: boolean;
   error: string | null;
+  hasMore: boolean;
 
   fetchActions: (userId: string) => Promise<void>;
+  loadMore: (userId: string) => Promise<void>;
   executeAndUpdate: (action: Action) => Promise<void>;
   dismissAction: (actionId: string) => Promise<void>;
 
@@ -33,17 +36,45 @@ export const useActionsStore = create<ActionsState>((set, get) => ({
   actions: [],
   loading: false,
   error: null,
+  hasMore: true,
 
   fetchActions: async (userId: string) => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, hasMore: true });
     try {
       const actions = await getActionsForUser(userId);
-      set({ actions, loading: false });
+      set({
+        actions,
+        loading: false,
+        hasMore: actions.length >= DEFAULT_PAGE_LIMIT,
+      });
     } catch (err) {
       const message =
         err instanceof DatabaseError
           ? err.message
           : 'Failed to load actions.';
+      set({ error: message, loading: false });
+    }
+  },
+
+  loadMore: async (userId: string) => {
+    const { loading, hasMore, actions } = get();
+    if (loading || !hasMore) return;
+
+    set({ loading: true, error: null });
+    try {
+      const moreActions = await getActionsForUser(userId, {
+        offset: actions.length,
+      });
+      set({
+        actions: [...actions, ...moreActions],
+        loading: false,
+        hasMore: moreActions.length >= DEFAULT_PAGE_LIMIT,
+      });
+    } catch (err) {
+      const message =
+        err instanceof DatabaseError
+          ? err.message
+          : 'Failed to load more actions.';
       set({ error: message, loading: false });
     }
   },

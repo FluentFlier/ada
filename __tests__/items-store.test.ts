@@ -19,6 +19,7 @@ vi.mock('@/services/insforge', () => ({
   updateUserNote: vi.fn(),
   subscribeToItems: vi.fn(),
   triggerClassify: vi.fn(),
+  DEFAULT_PAGE_LIMIT: 50,
   DatabaseError: class DatabaseError extends Error {
     cause: unknown;
     constructor(message: string, cause?: unknown) {
@@ -99,6 +100,67 @@ describe('items store', () => {
       expect(state.items).toEqual([]);
       expect(state.error).toBe('Failed to load items.');
       expect(state.loading).toBe(false);
+    });
+
+    it('sets hasMore to true when results equal page limit', async () => {
+      const items = Array.from({ length: 50 }, (_, i) =>
+        makeItem({ id: `item-${i}` }),
+      );
+      vi.mocked(mockGetItems).mockResolvedValue(items);
+
+      await useItemsStore.getState().fetchItems('u1');
+
+      expect(useItemsStore.getState().hasMore).toBe(true);
+    });
+
+    it('sets hasMore to false when results fewer than page limit', async () => {
+      const items = [makeItem({ id: 'a' }), makeItem({ id: 'b' })];
+      vi.mocked(mockGetItems).mockResolvedValue(items);
+
+      await useItemsStore.getState().fetchItems('u1');
+
+      expect(useItemsStore.getState().hasMore).toBe(false);
+    });
+  });
+
+  describe('loadMore', () => {
+    it('appends items to existing list', async () => {
+      const initial = [makeItem({ id: 'a' }), makeItem({ id: 'b' })];
+      useItemsStore.setState({ items: initial, hasMore: true });
+
+      const more = [makeItem({ id: 'c' }), makeItem({ id: 'd' })];
+      vi.mocked(mockGetItems).mockResolvedValue(more);
+
+      await useItemsStore.getState().loadMore('u1');
+
+      expect(useItemsStore.getState().items).toHaveLength(4);
+      expect(useItemsStore.getState().items[2].id).toBe('c');
+    });
+
+    it('passes offset based on current items length', async () => {
+      const initial = [makeItem({ id: 'a' }), makeItem({ id: 'b' })];
+      useItemsStore.setState({ items: initial, hasMore: true });
+      vi.mocked(mockGetItems).mockResolvedValue([]);
+
+      await useItemsStore.getState().loadMore('u1');
+
+      expect(mockGetItems).toHaveBeenCalledWith('u1', { offset: 2 });
+    });
+
+    it('does nothing when hasMore is false', async () => {
+      useItemsStore.setState({ items: [], hasMore: false });
+
+      await useItemsStore.getState().loadMore('u1');
+
+      expect(mockGetItems).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when already loading', async () => {
+      useItemsStore.setState({ items: [], hasMore: true, loading: true });
+
+      await useItemsStore.getState().loadMore('u1');
+
+      expect(mockGetItems).not.toHaveBeenCalled();
     });
   });
 

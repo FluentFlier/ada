@@ -9,6 +9,7 @@ import type { Action } from '@/types/action';
 vi.mock('@/services/insforge', () => ({
   getActionsForUser: vi.fn(),
   updateActionStatus: vi.fn(),
+  DEFAULT_PAGE_LIMIT: 50,
   DatabaseError: class DatabaseError extends Error {
     cause: unknown;
     constructor(message: string, cause?: unknown) {
@@ -56,6 +57,7 @@ function resetStore() {
     actions: [],
     loading: false,
     error: null,
+    hasMore: true,
   });
 }
 
@@ -92,6 +94,36 @@ describe('actions store', () => {
       expect(state.actions).toEqual([]);
       expect(state.error).toBe('Failed to load actions.');
       expect(state.loading).toBe(false);
+    });
+
+    it('sets hasMore to false when results fewer than page limit', async () => {
+      vi.mocked(mockGetActions).mockResolvedValue([makeAction()]);
+
+      await useActionsStore.getState().fetchActions('u1');
+
+      expect(useActionsStore.getState().hasMore).toBe(false);
+    });
+  });
+
+  describe('loadMore', () => {
+    it('appends actions to existing list', async () => {
+      const initial = [makeAction({ id: 'a1' })];
+      useActionsStore.setState({ actions: initial, hasMore: true });
+
+      const more = [makeAction({ id: 'a2' })];
+      vi.mocked(mockGetActions).mockResolvedValue(more);
+
+      await useActionsStore.getState().loadMore('u1');
+
+      expect(useActionsStore.getState().actions).toHaveLength(2);
+    });
+
+    it('does nothing when hasMore is false', async () => {
+      useActionsStore.setState({ actions: [], hasMore: false });
+
+      await useActionsStore.getState().loadMore('u1');
+
+      expect(mockGetActions).not.toHaveBeenCalled();
     });
   });
 

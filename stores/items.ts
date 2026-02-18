@@ -14,6 +14,7 @@ import {
   subscribeToItems,
   triggerClassify,
   DatabaseError,
+  DEFAULT_PAGE_LIMIT,
 } from '@/services/insforge';
 import type { Item, ItemStatus, Category } from '@/types/item';
 
@@ -21,8 +22,10 @@ interface ItemsState {
   items: Item[];
   loading: boolean;
   error: string | null;
+  hasMore: boolean;
 
   fetchItems: (userId: string) => Promise<void>;
+  loadMore: (userId: string) => Promise<void>;
   prependItem: (item: Item) => void;
   refreshItem: (itemId: string) => Promise<void>;
   archiveItem: (itemId: string) => Promise<void>;
@@ -43,17 +46,45 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
   items: [],
   loading: false,
   error: null,
+  hasMore: true,
 
   fetchItems: async (userId: string) => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, hasMore: true });
     try {
       const items = await getItems(userId);
-      set({ items, loading: false });
+      set({
+        items,
+        loading: false,
+        hasMore: items.length >= DEFAULT_PAGE_LIMIT,
+      });
     } catch (err) {
       const message =
         err instanceof DatabaseError
           ? err.message
           : 'Failed to load items.';
+      set({ error: message, loading: false });
+    }
+  },
+
+  loadMore: async (userId: string) => {
+    const { loading, hasMore, items } = get();
+    if (loading || !hasMore) return;
+
+    set({ loading: true, error: null });
+    try {
+      const moreItems = await getItems(userId, {
+        offset: items.length,
+      });
+      set({
+        items: [...items, ...moreItems],
+        loading: false,
+        hasMore: moreItems.length >= DEFAULT_PAGE_LIMIT,
+      });
+    } catch (err) {
+      const message =
+        err instanceof DatabaseError
+          ? err.message
+          : 'Failed to load more items.';
       set({ error: message, loading: false });
     }
   },
