@@ -92,6 +92,20 @@ export default async function handler(
       .update({ description: summary.slice(0, 1000) })
       .eq('id', item_id);
 
+    // 6. Notify via realtime
+    const userId = String(item.user_id);
+    try {
+      await client.realtime.connect();
+      await client.realtime.subscribe(`items:${userId}`);
+      await client.realtime.publish(
+        `items:${userId}`,
+        'item_updated',
+        { item: { ...item, description: summary.slice(0, 1000) } },
+      );
+    } catch (realtimeErr) {
+      console.warn('Realtime notify failed (non-fatal):', realtimeErr);
+    }
+
     return jsonResponse({ success: true, summary });
   } catch (err) {
     console.error('Summarize function error:', err);
@@ -114,8 +128,8 @@ export default async function handler(
           })
           .eq('id', body.action_id);
       }
-    } catch {
-      // Ignore cleanup errors
+    } catch (cleanupErr) {
+      console.warn('Failed to mark action as failed:', cleanupErr);
     }
 
     return jsonResponse({ error: 'Summarization failed' }, 500);
@@ -138,7 +152,8 @@ async function fetchJinaContent(url: string): Promise<string> {
 
     const text = await response.text();
     return text.slice(0, 15_000);
-  } catch {
+  } catch (fetchErr) {
+    console.warn('Jina Reader failed, using raw URL:', fetchErr);
     return url;
   } finally {
     clearTimeout(timeout);

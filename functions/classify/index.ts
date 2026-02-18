@@ -36,7 +36,8 @@ export default async function handler(
       return jsonResponse({ error: 'Authentication required' }, 401);
     }
 
-    const { item_id } = await req.json();
+    const body = await req.json();
+    const { item_id } = body;
     if (!item_id) {
       return jsonResponse({ error: 'item_id required' }, 400);
     }
@@ -46,17 +47,26 @@ export default async function handler(
       edgeFunctionToken: userToken,
     });
 
-    // 1. Fetch item
-    const { data: items, error: fetchError } = await client.database
-      .from('items')
-      .select('*')
-      .eq('id', item_id);
+    // 1. Fetch item (skip DB round-trip if caller passed type + raw_content)
+    let item: Record<string, unknown>;
+    if (body.type && body.raw_content) {
+      item = {
+        id: item_id,
+        type: body.type,
+        raw_content: body.raw_content,
+        user_id: body.user_id,
+      };
+    } else {
+      const { data: items, error: fetchError } = await client.database
+        .from('items')
+        .select('*')
+        .eq('id', item_id);
 
-    if (fetchError || !items || items.length === 0) {
-      return jsonResponse({ error: 'Item not found' }, 404);
+      if (fetchError || !items || items.length === 0) {
+        return jsonResponse({ error: 'Item not found' }, 404);
+      }
+      item = items[0] as Record<string, unknown>;
     }
-
-    const item = items[0] as Record<string, unknown>;
 
     // 2. Get content based on type
     const rawContent = String(item.raw_content ?? '');
@@ -82,7 +92,7 @@ export default async function handler(
     );
 
     // 4. Update item with classification
-    await client.database
+    const { error: updateError } = await client.database
       .from('items')
       .update({
         category: classification.category,
@@ -95,6 +105,11 @@ export default async function handler(
         updated_at: new Date().toISOString(),
       })
       .eq('id', item_id);
+
+    if (updateError) {
+      console.warn('Item update failed:', updateError);
+      return jsonResponse({ error: 'Failed to update item' }, 500);
+    }
 
     // 5. Create action rows (batch insert)
     const userId = String(item.user_id);
@@ -156,11 +171,9 @@ async function downloadImageAsBase64(
 
     const arrayBuf = await (data as Blob).arrayBuffer();
     const bytes = new Uint8Array(arrayBuf);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
+    return btoa(
+      Array.from(bytes, (b) => String.fromCharCode(b)).join(''),
+    );
   } catch (err) {
     console.warn('Image base64 conversion failed:', err);
     return null;
