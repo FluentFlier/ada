@@ -103,7 +103,8 @@ export function extractDomain(url: string): string {
   try {
     const hostname = new URL(url).hostname;
     return hostname.replace(/^www\./, '');
-  } catch {
+  } catch (err) {
+    console.warn('Failed to extract domain from URL:', err);
     return url.slice(0, 30);
   }
 }

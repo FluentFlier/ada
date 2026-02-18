@@ -3,7 +3,7 @@
  * Includes manual "Add" button for POC (before share extension).
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { COLORS } from '@/constants/theme';
 import { useAuthStore } from '@/stores/auth';
 import { useItemsStore } from '@/stores/items';
 import { useActionsStore } from '@/stores/actions';
@@ -31,11 +32,25 @@ export default function InboxScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const { items, loading, fetchItems, prependItem } = useItemsStore();
+  const reclassify = useItemsStore((s) => s.reclassify);
   const [showAddInput, setShowAddInput] = useState(false);
   const [addText, setAddText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [, setTick] = useState(0);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { toggleStar } = useItemsStore();
+
+  const hasPending = items.some((i) => i.status === 'pending');
+
+  useEffect(() => {
+    if (hasPending) {
+      tickRef.current = setInterval(() => setTick((t) => t + 1), 10_000);
+    }
+    return () => {
+      if (tickRef.current) clearInterval(tickRef.current);
+    };
+  }, [hasPending]);
 
   const inboxItems = useMemo(
     () =>
@@ -111,7 +126,7 @@ export default function InboxScreen() {
               <Ionicons
                 name={item.is_starred ? 'star' : 'star-outline'}
                 size={18}
-                color={item.is_starred ? '#F59E0B' : '#6B7280'}
+                color={item.is_starred ? COLORS.warning : COLORS.textMuted}
               />
             </Pressable>
           </View>
@@ -158,7 +173,22 @@ export default function InboxScreen() {
           </View>
         )}
 
-        <Text style={styles.cardMeta}>{timeAgo(item.created_at)}</Text>
+        <View style={styles.cardFooter}>
+          <Text style={styles.cardMeta}>{timeAgo(item.created_at)}</Text>
+          {item.status === 'pending' &&
+            Date.now() - new Date(item.created_at).getTime() > 30_000 && (
+              <View style={styles.retryRow}>
+                <Text style={styles.classifyingText}>Classifying...</Text>
+                <Pressable
+                  style={styles.retryButton}
+                  onPress={() => reclassify(item.id)}
+                  hitSlop={8}
+                >
+                  <Ionicons name="refresh" size={12} color={COLORS.warning} />
+                </Pressable>
+              </View>
+            )}
+        </View>
       </Pressable>
     );
   };
@@ -170,7 +200,7 @@ export default function InboxScreen() {
           <TextInput
             style={styles.addInput}
             placeholder="Paste a URL or type anything..."
-            placeholderTextColor="#6B7280"
+            placeholderTextColor={COLORS.textMuted}
             value={addText}
             onChangeText={setAddText}
             autoFocus
@@ -189,7 +219,7 @@ export default function InboxScreen() {
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#FFF" />
+                <ActivityIndicator size="small" color={COLORS.textPrimary} />
               ) : (
                 <Text style={styles.addButtonText}>Save</Text>
               )}
@@ -207,7 +237,7 @@ export default function InboxScreen() {
           <RefreshControl
             refreshing={loading}
             onRefresh={onRefresh}
-            tintColor="#6366F1"
+            tintColor={COLORS.primary}
           />
         }
         ListEmptyComponent={
@@ -233,10 +263,10 @@ export default function InboxScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F0F14' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   list: { padding: 16, gap: 12 },
   card: {
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 16,
     gap: 8,
@@ -261,19 +291,36 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#F59E0B',
+    backgroundColor: COLORS.warning,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.textPrimary,
   },
   cardDescription: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: COLORS.textSecondary,
     lineHeight: 20,
   },
-  cardMeta: { fontSize: 12, color: '#6B7280' },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardMeta: { fontSize: 12, color: COLORS.textMuted },
+  retryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  classifyingText: {
+    fontSize: 12,
+    color: COLORS.warning,
+  },
+  retryButton: {
+    padding: 4,
+  },
   empty: {
     alignItems: 'center',
     paddingTop: 80,
@@ -282,11 +329,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.textPrimary,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.textMuted,
     textAlign: 'center',
   },
   fab: {
@@ -296,16 +343,16 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#6366F1',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#6366F1',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },
-  fabText: { fontSize: 28, color: '#FFF', fontWeight: '300' },
+  fabText: { fontSize: 28, color: COLORS.textPrimary, fontWeight: '300' },
   actionPills: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -318,33 +365,33 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   actionPill: {
-    backgroundColor: '#2A2A3A',
+    backgroundColor: COLORS.surfaceElevated,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 14,
   },
   actionPillText: {
     fontSize: 12,
-    color: '#818CF8',
+    color: COLORS.primaryLight,
     fontWeight: '600',
   },
   actionDismiss: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.textMuted,
     paddingHorizontal: 2,
   },
   addContainer: {
     padding: 16,
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#2A2A3A',
+    borderBottomColor: COLORS.surfaceElevated,
     gap: 12,
   },
   addInput: {
-    backgroundColor: '#0F0F14',
+    backgroundColor: COLORS.background,
     borderRadius: 12,
     padding: 14,
-    color: '#FFFFFF',
+    color: COLORS.textPrimary,
     fontSize: 15,
     minHeight: 60,
     textAlignVertical: 'top',
@@ -355,13 +402,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   addCancel: { padding: 10 },
-  addCancelText: { color: '#6B7280', fontSize: 14 },
+  addCancelText: { color: COLORS.textMuted, fontSize: 14 },
   addButton: {
-    backgroundColor: '#6366F1',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
   },
   addButtonDisabled: { opacity: 0.6 },
-  addButtonText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
+  addButtonText: { color: COLORS.textPrimary, fontWeight: '600', fontSize: 14 },
 });

@@ -13,6 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Calendar from 'expo-calendar';
+import { COLORS } from '@/constants/theme';
 
 export default function PermissionsScreen() {
   const router = useRouter();
@@ -22,8 +23,8 @@ export default function PermissionsScreen() {
     setRequesting(true);
     try {
       await Calendar.requestCalendarPermissionsAsync();
-    } catch {
-      // Permission denied or error — not blocking
+    } catch (err) {
+      console.warn('Calendar permission request failed:', err);
     }
     router.replace('/setup-guide');
   };
@@ -35,7 +36,7 @@ export default function PermissionsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Ionicons name="calendar-outline" size={64} color="#6366F1" style={styles.icon} />
+        <Ionicons name="calendar-outline" size={64} color={COLORS.primary} style={styles.icon} />
         <Text style={styles.title}>Calendar Access</Text>
         <Text style={styles.subtitle}>
           Ada can create calendar events when it detects dates in your
@@ -63,7 +64,7 @@ export default function PermissionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F0F14',
+    backgroundColor: COLORS.background,
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
@@ -76,18 +77,18 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#FFF',
+    color: COLORS.textPrimary,
   },
   subtitle: {
     fontSize: 15,
-    color: '#9CA3AF',
+    color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     paddingHorizontal: 16,
   },
   actions: { gap: 16, alignItems: 'center' },
   button: {
-    backgroundColor: '#6366F1',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 48,
     paddingVertical: 16,
     borderRadius: 12,
@@ -96,10 +97,10 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: {
-    color: '#FFF',
+    color: COLORS.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   skip: { marginTop: 4 },
-  skipText: { color: '#6B7280', fontSize: 14 },
+  skipText: { color: COLORS.textMuted, fontSize: 14 },
 });

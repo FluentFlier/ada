@@ -4,6 +4,7 @@
 
 import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import { COLORS } from '@/constants/theme';
 import { useAuthStore } from '@/stores/auth';
 import { useItemsStore } from '@/stores/items';
 import { CONFIG } from '@/constants/config';
@@ -24,7 +25,8 @@ export default function SettingsScreen() {
   const handleSignOut = async () => {
     try {
       await signOut();
-    } catch {
+    } catch (err) {
+      console.warn('Sign out failed:', err);
       Alert.alert('Error', 'Failed to sign out. Please try again.');
     }
   };
@@ -94,36 +96,36 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F0F14', padding: 16 },
+  container: { flex: 1, backgroundColor: COLORS.background, padding: 16 },
   section: { gap: 12, marginBottom: 32 },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7280',
+    color: COLORS.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     padding: 14,
     borderRadius: 10,
   },
-  label: { fontSize: 15, color: '#FFF' },
-  value: { fontSize: 15, color: '#9CA3AF' },
+  label: { fontSize: 15, color: COLORS.textPrimary },
+  value: { fontSize: 15, color: COLORS.textSecondary },
   errorText: {
-    color: '#EF4444',
+    color: COLORS.danger,
     fontSize: 13,
     textAlign: 'center',
     marginBottom: 12,
   },
   signOut: {
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
   },
   disabled: { opacity: 0.5 },
-  signOutText: { color: '#EF4444', fontSize: 16, fontWeight: '600' },
+  signOutText: { color: COLORS.danger, fontSize: 16, fontWeight: '600' },
 });

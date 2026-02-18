@@ -163,7 +163,8 @@ function estimateUrgency(
     if (hoursUntil < 72) return 'high';
     if (hoursUntil < 168) return 'medium'; // 1 week
     return 'low';
-  } catch {
+  } catch (err) {
+    console.warn('Failed to parse date for urgency estimation:', err);
     return 'low';
   }
 }
@@ -193,7 +194,8 @@ function generateTitle(content: string, _category: Category): string {
     try {
       const url = new URL(content);
       return url.hostname.replace(/^www\./, '');
-    } catch {
+    } catch (err) {
+      console.warn('Failed to parse URL for title generation:', err);
       return content.slice(0, 60);
     }
   }

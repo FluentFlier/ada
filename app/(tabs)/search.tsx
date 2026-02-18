@@ -2,12 +2,13 @@
  * Search — client-side search across all item fields.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, FlatList, Pressable, StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { COLORS } from '@/constants/theme';
 import { useItemsStore } from '@/stores/items';
 import { getCategoryDef } from '@/constants/categories';
 import { truncate, timeAgo } from '@/utils/format';
@@ -17,8 +18,20 @@ export default function SearchScreen() {
   const router = useRouter();
   const searchItems = useItemsStore((s) => s.searchItems);
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const results = query.length >= 2 ? searchItems(query) : [];
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
+
+  const results = debouncedQuery.length >= 2
+    ? searchItems(debouncedQuery)
+    : [];
 
   const renderItem = ({ item }: { item: Item }) => {
     const cat = getCategoryDef(item.category);
@@ -37,7 +50,7 @@ export default function SearchScreen() {
             </Text>
           </View>
           {item.is_starred && (
-            <Ionicons name="star" size={16} color="#F59E0B" />
+            <Ionicons name="star" size={16} color={COLORS.warning} />
           )}
         </View>
       </Pressable>
@@ -50,7 +63,7 @@ export default function SearchScreen() {
         <TextInput
           style={styles.input}
           placeholder="Search your items..."
-          placeholderTextColor="#6B7280"
+          placeholderTextColor={COLORS.textMuted}
           value={query}
           onChangeText={setQuery}
           autoCorrect={false}
@@ -67,7 +80,7 @@ export default function SearchScreen() {
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
-          query.length >= 2 ? (
+          debouncedQuery.length >= 2 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>No results found</Text>
             </View>
@@ -85,20 +98,20 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F0F14' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   searchBar: { padding: 16 },
   input: {
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 14,
     fontSize: 16,
-    color: '#FFF',
+    color: COLORS.textPrimary,
     borderWidth: 1,
-    borderColor: '#2A2A3A',
+    borderColor: COLORS.surfaceElevated,
   },
   list: { paddingHorizontal: 16, gap: 8 },
   card: {
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     borderRadius: 10,
     padding: 14,
   },
@@ -108,8 +121,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardContent: { flex: 1, gap: 4 },
-  title: { fontSize: 15, fontWeight: '500', color: '#FFF' },
-  meta: { fontSize: 12, color: '#6B7280' },
+  title: { fontSize: 15, fontWeight: '500', color: COLORS.textPrimary },
+  meta: { fontSize: 12, color: COLORS.textMuted },
   empty: { alignItems: 'center', paddingTop: 60 },
-  emptyText: { fontSize: 14, color: '#6B7280' },
+  emptyText: { fontSize: 14, color: COLORS.textMuted },
 });

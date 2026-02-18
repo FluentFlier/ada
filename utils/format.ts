@@ -71,7 +71,8 @@ export function cleanUrl(url: string): string {
     const host = parsed.hostname.replace(/^www\./, '');
     const path = parsed.pathname === '/' ? '' : parsed.pathname;
     return truncate(`${host}${path}`, 50);
-  } catch {
+  } catch (err) {
+    console.warn('Failed to parse URL for display:', err);
     return truncate(url, 50);
   }
 }
