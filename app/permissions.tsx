@@ -11,6 +11,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import * as Calendar from 'expo-calendar';
 
 export default function PermissionsScreen() {
@@ -34,7 +35,7 @@ export default function PermissionsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.icon}>   </Text>
+        <Ionicons name="calendar-outline" size={64} color="#6366F1" style={styles.icon} />
         <Text style={styles.title}>Calendar Access</Text>
         <Text style={styles.subtitle}>
           Ada can create calendar events when it detects dates in your
@@ -71,7 +72,7 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 48,
   },
-  icon: { fontSize: 64, marginBottom: 16 },
+  icon: { marginBottom: 16 },
   title: {
     fontSize: 28,
     fontWeight: '800',

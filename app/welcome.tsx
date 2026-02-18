@@ -14,6 +14,7 @@ import {
   type ViewToken,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -28,19 +29,19 @@ const PAGES: WelcomePage[] = [
     title: 'Share Anything',
     subtitle:
       'Links, screenshots, text, images — share from any app and Ada saves it instantly.',
-    icon: '    ',
+    icon: 'share-outline',
   },
   {
     title: 'Auto-Organized',
     subtitle:
       'AI classifies everything into smart categories. No manual sorting needed.',
-    icon: '    ',
+    icon: 'folder-open-outline',
   },
   {
     title: 'Smart Actions',
     subtitle:
       'Ada suggests calendar events, reminders, and summaries. One tap to execute.',
-    icon: '    ',
+    icon: 'flash-outline',
   },
 ];
 
@@ -69,7 +70,7 @@ export default function WelcomeScreen() {
 
   const renderPage = ({ item }: { item: WelcomePage }) => (
     <View style={styles.page}>
-      <Text style={styles.icon}>{item.icon}</Text>
+      <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={64} color="#6366F1" style={styles.icon} />
       <Text style={styles.title}>{item.title}</Text>
       <Text style={styles.subtitle}>{item.subtitle}</Text>
     </View>
@@ -132,7 +133,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     paddingBottom: 120,
   },
-  icon: { fontSize: 64, marginBottom: 32 },
+  icon: { marginBottom: 32 },
   title: {
     fontSize: 28,
     fontWeight: '800',
