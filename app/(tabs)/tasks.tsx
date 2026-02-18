@@ -16,17 +16,9 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/auth';
 import { useActionsStore, type ActionWithItem } from '@/stores/actions';
 import { getCategoryDef } from '@/constants/categories';
+import { ACTION_LABELS, PLACEHOLDER_ACTIONS } from '@/constants/actions';
 import { timeAgo, truncate } from '@/utils/format';
 import type { Category } from '@/types/item';
-
-const ACTION_LABELS: Record<string, string> = {
-  add_to_calendar: 'Add to Calendar',
-  set_reminder: 'Set Reminder',
-  save_contact: 'Save Contact',
-  summarize: 'Summarize',
-  create_note: 'Create Note',
-  track_price: 'Track Price',
-};
 
 export default function TasksScreen() {
   const router = useRouter();

@@ -135,16 +135,11 @@ describe('actions service', () => {
       expect(mockTriggerSummarize).toHaveBeenCalledWith('item-1', 'action-1');
     });
 
-    it('marks placeholder actions as approved', async () => {
-      vi.mocked(mockUpdateActionStatus).mockResolvedValue(undefined);
-
+    it('throws ActionError for placeholder actions', async () => {
       for (const type of ['save_contact', 'create_note', 'track_price'] as const) {
         const action = makeAction({ type });
-        const result = await executeAction(action);
-        expect(result).toEqual({ status: 'approved' });
+        await expect(executeAction(action)).rejects.toThrow('coming soon');
       }
-
-      expect(mockUpdateActionStatus).toHaveBeenCalledTimes(3);
     });
 
     it('throws ActionError for unknown action type', async () => {

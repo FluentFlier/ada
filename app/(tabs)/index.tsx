@@ -23,16 +23,8 @@ import { saveItem, triggerClassify } from '@/services/insforge';
 import { getCategoryDef } from '@/constants/categories';
 import { isLikelyUrl } from '@/utils/url-patterns';
 import { timeAgo, truncate } from '@/utils/format';
+import { ACTION_LABELS_SHORT, PLACEHOLDER_ACTIONS } from '@/constants/actions';
 import type { ContentType, Item } from '@/types/item';
-
-const ACTION_LABELS: Record<string, string> = {
-  add_to_calendar: 'Calendar',
-  set_reminder: 'Remind',
-  save_contact: 'Contact',
-  summarize: 'Summarize',
-  create_note: 'Note',
-  track_price: 'Track',
-};
 
 export default function InboxScreen() {
   const router = useRouter();
@@ -68,7 +60,9 @@ export default function InboxScreen() {
       setShowAddInput(false);
       fetchItems(user.id);
     } catch (err) {
-      Alert.alert('Error', 'Failed to save item. Please try again.');
+      const msg =
+        err instanceof Error ? err.message : 'Unknown error';
+      Alert.alert('Save Failed', msg);
     }
   };
 
@@ -78,7 +72,8 @@ export default function InboxScreen() {
   const renderItem = ({ item }: { item: Item }) => {
     const cat = getCategoryDef(item.category);
     const itemActions = getForItem(item.id).filter(
-      (a) => a.status === 'suggested',
+      (a) =>
+        a.status === 'suggested' && !PLACEHOLDER_ACTIONS.has(a.type),
     );
 
     return (
@@ -138,7 +133,7 @@ export default function InboxScreen() {
                   }}
                 >
                   <Text style={styles.actionPillText}>
-                    {ACTION_LABELS[action.type] ?? action.type}
+                    {ACTION_LABELS_SHORT[action.type] ?? action.type}
                   </Text>
                 </Pressable>
                 <Pressable

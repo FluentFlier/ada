@@ -11,9 +11,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
-
-const SETUP_KEY = 'ada_setup_completed';
+import { useAuthStore } from '@/stores/auth';
 
 interface Step {
   number: number;
@@ -52,11 +50,12 @@ const STEPS: Step[] = [
 
 export default function SetupGuideScreen() {
   const router = useRouter();
+  const completeSetup = useAuthStore((s) => s.completeSetup);
   const [completing, setCompleting] = useState(false);
 
   const handleDone = async () => {
     setCompleting(true);
-    await SecureStore.setItemAsync(SETUP_KEY, 'true');
+    await completeSetup();
     router.replace('/');
   };
 

@@ -159,9 +159,9 @@ export async function executeAction(
     case 'save_contact':
     case 'create_note':
     case 'track_price':
-      // Mark as approved — these are placeholders for future
-      await updateActionStatus(action.id, 'approved');
-      return { status: 'approved' };
+      throw new ActionError(
+        `${action.type.replace(/_/g, ' ')} is coming soon`,
+      );
 
     default:
       throw new ActionError(`Unknown action type: ${action.type}`);

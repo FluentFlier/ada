@@ -16,15 +16,7 @@ import { ActionError } from '@/services/actions';
 import { getCategoryDef } from '@/constants/categories';
 import { smartDate, truncate, confidenceLabel } from '@/utils/format';
 import { isLikelyUrl } from '@/utils/url-patterns';
-
-const ACTION_LABELS: Record<string, string> = {
-  add_to_calendar: 'Add to Calendar',
-  set_reminder: 'Set Reminder',
-  save_contact: 'Save Contact',
-  summarize: 'Summarize',
-  create_note: 'Create Note',
-  track_price: 'Track Price',
-};
+import { ACTION_LABELS, PLACEHOLDER_ACTIONS } from '@/constants/actions';
 
 export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -102,7 +94,9 @@ export default function ItemDetailScreen() {
     if (isUrl) Linking.openURL(item.raw_content);
   };
 
-  const visibleActions = actions;
+  const visibleActions = actions.filter(
+    (a) => a.status !== 'failed',
+  );
 
   return (
     <ScrollView style={styles.container}>
@@ -224,7 +218,14 @@ export default function ItemDetailScreen() {
                 )}
               </View>
               <View style={styles.actionButtons}>
-                {action.status === 'suggested' && (
+                {action.status === 'suggested' &&
+                  PLACEHOLDER_ACTIONS.has(action.type) && (
+                    <Text style={styles.comingSoonText}>
+                      Coming Soon
+                    </Text>
+                  )}
+                {action.status === 'suggested' &&
+                  !PLACEHOLDER_ACTIONS.has(action.type) && (
                   <>
                     <Pressable
                       style={styles.approveBtn}
@@ -252,8 +253,8 @@ export default function ItemDetailScreen() {
                   </>
                 )}
                 {action.status === 'approved' && (
-                  <Text style={styles.completedText}>
-                    ✓ Approved
+                  <Text style={styles.comingSoonText}>
+                    Coming Soon
                   </Text>
                 )}
                 {action.status === 'completed' && (
@@ -422,6 +423,7 @@ const styles = StyleSheet.create({
   approveBtnText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
   dismissBtnText: { color: '#6B7280', fontSize: 13 },
   completedText: { color: '#10B981', fontSize: 13, fontWeight: '600' },
+  comingSoonText: { color: '#F59E0B', fontSize: 13, fontWeight: '500' },
   itemActions: {
     flexDirection: 'row',
     gap: 16,
