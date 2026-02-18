@@ -2,244 +2,255 @@
 
 **Analysis Date:** 2026-02-18
 
-## Tech Debt
+## Critical Issues
 
-**Bare exception handlers in realtime subscription:**
-- Issue: `insforge.realtime.connect().catch()` swallows errors without logging (line 450 in `services/insforge.ts`)
-- Files: `services/insforge.ts` (lines 446–452)
-- Impact: Realtime connection failures silently fail. App stops receiving item updates but user sees no error.
-- Fix approach: Add explicit error logging and implement retry strategy with exponential backoff. Consider surface UI alert if realtime fails to connect on app init.
+**Hardcoded test credentials in source code:**
+- Issue: `services/insforge.ts` lines 172-175 contains hardcoded test user email (`ada.test@example.com`) and password (`AdaTest12345`) in the `devAutoLogin()` function. While guarded by `__DEV__`, this is committed to the repo and visible to anyone with access.
+- Files: `services/insforge.ts` lines 170-181
+- Impact: Credential exposure in version control. If the repo is ever public, the test account is compromised.
+- Fix approach: Move test credentials to a `.env.development` file (which is gitignored). Read them via `process.env.EXPO_DEV_EMAIL` / `process.env.EXPO_DEV_PASSWORD`. Alternatively, remove devAutoLogin entirely and rely on a persistent token in SecureStore.
 
-**Missing error recovery for classification failures:**
-- Issue: `triggerClassify()` catches errors and swallows them (line 416 in `services/insforge.ts`). If Gemini classifies fails, item stays in "pending" state forever.
-- Files: `services/insforge.ts` (lines 409–418), `app/(tabs)/index.tsx` (line 66)
-- Impact: User saves item, sees "pending" forever if network drops during classification. No way to retry.
-- Fix approach: Store retry count in items table. After 3 failed attempts, set status to "pending_review" and show UI flag. Add manual "retry classification" UI.
+**No token refresh mechanism:**
+- Issue: The auth system stores a single access token in SecureStore but has no refresh token flow. When the token expires, the user's only path is: in development, auto-login fires (masking the problem); in production, the user is silently logged out.
+- Files: `services/insforge.ts` lines 145-166 (getCurrentUser), `stores/auth.ts` lines 73-91 (initialize)
+- Impact: Users will be randomly logged out when tokens expire. No proactive refresh means lost sessions, especially for users who open the app infrequently.
+- Fix approach: Store both access and refresh tokens. Add a `refreshToken()` function that calls the InsForge refresh endpoint. Call it when `getCurrentUser()` gets a 401, before falling back to null. Add a token expiry check on app foreground.
 
-**Share extension image upload non-fatal error handling:**
-- Issue: Image upload failure in share extension swallows error and continues (line 73 in `services/share-handler.ts`). Item gets saved with original imageUri instead of storage path, causing classify to fail.
-- Files: `services/share-handler.ts` (lines 62–75)
-- Impact: Screenshots/images from share extension may classify incorrectly if upload fails.
-- Fix approach: If image upload fails, still update item.raw_content to imageUri fallback, but mark extracted_data with "image_upload_failed" flag so classify function can handle it.
+**No input validation on user content:**
+- Issue: Zero validation or sanitization anywhere in the pipeline. Content from share extension, manual add input, and edge function responses is passed directly to DB operations and rendered in the UI without any checks.
+- Files: `services/share-handler.ts` (processSharedContent), `app/(tabs)/index.tsx` line 66 (handleAdd), `services/insforge.ts` lines 204-223 (saveItem), `functions/classify/index.ts` line 39 (req.json body)
+- Impact: Potential for injection attacks via crafted share content. Malformed URLs could cause crashes in URL parsing. Extremely long content could cause memory issues in the share extension (120MB limit).
+- Fix approach: Add a `validateContent()` function in `services/share-handler.ts` that: (1) enforces `maxTextLength` from config, (2) validates URLs with `URL` constructor, (3) strips null bytes and control characters, (4) validates edge function request bodies with a schema validator (e.g., zod).
 
-**Unverified realtime event message shapes:**
-- Issue: Realtime message parsing assumes `{ item?: Item }` structure (line 440 in `services/insforge.ts`) with no validation.
-- Files: `services/insforge.ts` (lines 439–444)
-- Impact: If server sends malformed realtime message, app silently drops the update.
-- Fix approach: Validate incoming realtime messages with type guard before updating state. Log invalid messages for debugging.
+## High Priority
 
-## Known Bugs
+**Swallowed classification errors:**
+- Issue: `triggerClassify()` failures are silently swallowed with `.catch(() => {})` in two places. If classification consistently fails (quota exhausted, function misconfigured, auth issues), users see "pending" items forever with no feedback.
+- Files: `services/share-handler.ts` line 78, `app/(tabs)/index.tsx` line 68
+- Impact: Users have no way to know classification failed. Items stay in "pending" status indefinitely. No retry mechanism exists.
+- Fix approach: (1) Track classification failures in the item store (add a `classifyError` field or status). (2) Show a retry button on items stuck in "pending" for more than 30 seconds. (3) At minimum log the error: `triggerClassify(item.id).catch(err => console.warn('Classification trigger failed:', err))`.
 
-**Share extension dismissal timing race:**
-- Symptoms: Share extension sometimes closes before user sees "Saved" feedback (dismissal timeout is 500ms, but upload+save can take 700ms+)
-- Files: `share-extension/index.tsx` (line 58), `constants/config.ts` (line 25)
-- Trigger: Share image from Photos app on slower networks
-- Workaround: User must dismiss manually; does not affect data (item is still saved)
-- Fix approach: Measure actual processing time, use minimum of 1 second delay. Consider showing a progress spinner instead of fixed delay.
+**DRY violation: fetchJinaContent duplicated across edge functions:**
+- Issue: `fetchJinaContent()` is copy-pasted identically in `functions/classify/index.ts` (line 172) and `functions/summarize/index.ts` (line 127). Similarly, `jsonResponse()` and `CORS_HEADERS` are duplicated in both files.
+- Files: `functions/classify/index.ts` lines 16-20, 172-195, 321-332; `functions/summarize/index.ts` lines 10-14, 127-146, 161-172
+- Impact: Bug fixes or behavior changes to Jina fetching must be applied in two places. Violates the project's "DRY is non-negotiable" principle.
+- Fix approach: Create a shared `functions/_shared/jina.ts` and `functions/_shared/response.ts`. Import in both edge functions. Note: InsForge edge functions use Deno -- verify shared imports work with their deployment model.
+
+**Client-side search does not scale:**
+- Issue: `searchItems()` in `stores/items.ts` (line 223) performs a full scan of all items in memory, joining 6 fields and doing `toLowerCase().includes()`. No server-side search, no debounce.
+- Files: `stores/items.ts` lines 223-240, `app/(tabs)/search.tsx` line 21
+- Impact: Works fine for <100 items. At 1000+ items, search becomes sluggish. At 10000+ items, memory pressure and UI jank. The `items` array holds the entire user history in memory with no pagination.
+- Fix approach: (1) Short-term: add a debounced search that delays the filter by 200ms. (2) Medium-term: implement server-side full-text search via InsForge database query with `ilike` or `textSearch`. (3) Long-term: use pgvector for semantic search as noted in CLAUDE.md.
+
+**All items loaded into memory at once:**
+- Issue: `getItems()` in `services/insforge.ts` (line 226) fetches ALL items for a user with no default limit. `fetchItems()` in `stores/items.ts` (line 47) stores them all in the Zustand store.
+- Files: `services/insforge.ts` lines 226-253, `stores/items.ts` lines 47-59
+- Impact: Memory usage grows linearly with user history. The main app will struggle with thousands of items, especially on older devices.
+- Fix approach: Add pagination to `getItems()` with a default limit (e.g., 50). Implement infinite scroll in Inbox and Library screens. Fetch older items on demand.
+
+## Medium Priority
+
+**102 hardcoded color values across 13 files (no theme system):**
+- Issue: Colors like `#0F0F14` (background), `#1A1A24` (card), `#6366F1` (primary), `#6B7280` (muted), `#9CA3AF` (secondary text) are hardcoded in StyleSheet.create() calls across every screen and component. 98 occurrences in `app/` alone, plus 4 in `share-extension/`.
+- Files: All files in `app/`, `share-extension/index.tsx`
+- Impact: (1) Changing the color scheme requires editing every file. (2) No dark/light mode support possible without a theme system. (3) Inconsistency risk when adding new screens.
+- Fix approach: Create a `constants/theme.ts` with a `COLORS` object. Replace all hardcoded hex values with `COLORS.background`, `COLORS.card`, `COLORS.primary`, etc. This is a mechanical refactor but touches many files.
+
+**Optimistic updates don't notify the user on rollback:**
+- Issue: Store operations (`archiveItem`, `deleteItem`, `toggleStar`, `updateNote`, `dismissAction`) all follow the pattern: optimistic update -> API call -> on failure, `console.error` + silent rollback. The user sees the action succeed, then it silently reverts.
+- Files: `stores/items.ts` lines 80-98, 100-113, 140-160, 162-178; `stores/actions.ts` lines 75-93
+- Impact: Users think their action worked (star toggled, item archived) but it silently reverts. No toast, alert, or visual indicator of failure. Confusing UX.
+- Fix approach: Add an `error` state to stores that the UI can subscribe to, or trigger an Alert/Toast on rollback. Example: `set({ error: 'Failed to archive. Please try again.' })` and clear it after a timeout.
+
+**Edge function classify does not check update result:**
+- Issue: In `functions/classify/index.ts` lines 85-97, the item update call does not check the `error` return value. If the update fails, classification results are lost silently.
+- Files: `functions/classify/index.ts` lines 85-97
+- Impact: Classification completes, AI is billed, but the result never persists. Item stays "pending" forever.
+- Fix approach: Check the `error` from the `.update()` call and return an error response if it fails. Consider retrying once.
+
+**Summarize function does not publish realtime event:**
+- Issue: Per MEMORY.md, InsForge realtime is channel-based pub/sub, NOT postgres_changes. The classify edge function manually publishes to realtime (lines 122-132 of `functions/classify/index.ts`), but the summarize function does NOT publish any realtime event after updating the item.
+- Files: `functions/summarize/index.ts` (no realtime publish after lines 79-93), `functions/classify/index.ts` lines 122-132
+- Impact: After summarization completes, the client never gets notified. The user must manually pull-to-refresh to see the summary. The `refreshItem()` call in `app/item/[id].tsx` line 84 partially mitigates this for the detail screen, but only if the user is still on that screen.
+- Fix approach: Add realtime publish in the summarize function after updating the item, same pattern as classify.
+
+**`action_data` type safety is weak:**
+- Issue: `action_data` is typed as `Record<string, unknown>` in `types/action.ts` line 27. The action execution code uses `as unknown as CalendarActionData` (line 66) and `as unknown as ReminderActionData` (line 103) in `services/actions.ts`. No runtime validation of the shape.
+- Files: `types/action.ts` line 27, `services/actions.ts` lines 66, 103
+- Impact: If the AI returns malformed action data (missing `start_time`, invalid `remind_at`), the code will crash at runtime when accessing properties. `Calendar.createEventAsync` with `new Date(undefined)` produces an invalid date.
+- Fix approach: Add runtime validation before accessing action_data properties. Use a type guard function: `function isCalendarData(data: unknown): data is CalendarActionData`. Throw an `ActionError` with a clear message if validation fails.
+
+**Missing `hooks/` directory (planned but not created):**
+- Issue: `CLAUDE.md` project structure lists `hooks/useItems.ts` and `hooks/useAuth.ts` but no `hooks/` directory exists. Store hooks are imported directly from stores.
+- Files: Project root (missing `hooks/` directory)
+- Impact: No impact on functionality. But the documented structure diverges from reality, which could confuse contributors.
+- Fix approach: Either create the hooks directory with convenience wrappers as documented, or update CLAUDE.md to reflect the current direct-store-import pattern.
 
 **Realtime subscription doesn't unsubscribe on logout:**
-- Symptoms: Realtime channel for old user ID remains subscribed after sign-out
-- Files: `app/_layout.tsx` (line 60), `stores/items.ts` (line 182–184)
-- Trigger: User signs out → sign in as different user → realtime gets messages for both user IDs
-- Workaround: App restart fixes it
-- Fix approach: Call `insforge.realtime.disconnect()` in cleanup or on logout. Verify subscription lifecycle.
+- Issue: `_layout.tsx` line 60 returns an unsubscribe function, but the signOut flow in `stores/auth.ts` line 191 calls `disconnectRealtime()` which tries `insforge.realtime.disconnect?.()`. The `?` optional chaining suggests uncertainty about whether disconnect exists. If a user signs out and signs in as a different user, the old channel subscription may persist.
+- Files: `app/_layout.tsx` line 60, `stores/auth.ts` line 191, `services/insforge.ts` lines 466-473
+- Impact: Potential for receiving realtime events for a previous user's items after re-login.
+- Fix approach: Ensure `startRealtime()` return value (unsubscribe) is called during signOut, before `disconnectRealtime()`. Track active subscription in the store.
 
-**Note update doesn't optimistically update correctly:**
-- Symptoms: User types note, tabs away, tabs back → note shows old value briefly before updating
-- Files: `app/item/[id].tsx` (lines 277–282)
-- Trigger: Network is slow; optimistic update code path not fully optimistic
-- Workaround: Edit note again
-- Fix approach: Capture noteText state before blur, use that for optimistic update in store.
+## Low Priority
+
+**`insforge.ts` at 490 lines, approaching 500-line limit:**
+- Issue: `services/insforge.ts` is the largest file at 490 lines and serves as auth, items CRUD, actions CRUD, storage, edge functions, realtime, and error types all in one.
+- Files: `services/insforge.ts` (490 lines)
+- Impact: File is near the 500-line hard limit from CLAUDE.md. Adding any new DB operations will require a split.
+- Fix approach: Split into `services/insforge-auth.ts`, `services/insforge-items.ts`, `services/insforge-actions.ts`, re-exporting from a barrel `services/insforge.ts`.
+
+**`app/item/[id].tsx` at 468 lines, mostly styles:**
+- Issue: The item detail screen is 468 lines, with ~140 lines of StyleSheet at the bottom. The render function itself is long but within limits.
+- Files: `app/item/[id].tsx` (468 lines)
+- Impact: Approaching the 500-line limit. Adding more sections (e.g., related items, tags) will push it over.
+- Fix approach: Extract styles to a co-located `item-detail.styles.ts` or extract sub-components (ExtractedDataSection, ActionsSection) into separate files.
+
+**Bare `catch {}` blocks in 12 locations:**
+- Issue: 12 `catch {}` or `catch { /* comment */ }` blocks that discard error information entirely. While many are in fallback paths where failure is acceptable, the lack of any logging makes debugging harder.
+- Files: `services/classifier.ts` lines 166, 196; `services/insforge.ts` lines 161, 178, 470; `functions/summarize/index.ts` lines 117, 141; `app/permissions.tsx` line 25; `utils/url-patterns.ts` line 106; `stores/auth.ts` line 88; `utils/format.ts` line 74; `app/(tabs)/settings.tsx` line 27
+- Impact: When things go wrong in production, there is zero diagnostic information from these paths. Especially concerning in `stores/auth.ts` line 88 where initialization failure is silently swallowed.
+- Fix approach: At minimum, add `console.warn` in each catch block. For critical paths like auth initialization, set an error state that can be displayed to the user.
+
+**`useEffect` dependency in share extension:**
+- Issue: `share-extension/index.tsx` lines 28-30 calls `handleShare(props)` inside a `useEffect` with an empty dependency array. `handleShare` is defined inline and captures `props`.
+- Files: `share-extension/index.tsx` lines 28-30
+- Impact: No functional impact (props are static in share extensions), but may trigger ESLint exhaustive-deps warnings.
+- Fix approach: Move `handleShare` outside the component or add `props` to the dependency array.
+
+**`Dimensions.get('window')` called at module level:**
+- Issue: `app/welcome.tsx` line 19 calls `Dimensions.get('window')` at module scope. This captures the window width once and never updates.
+- Files: `app/welcome.tsx` line 19
+- Impact: If the device rotates or if using multitasking on iPad, the carousel pages will have the wrong width. Minor for a phone-only app.
+- Fix approach: Use `useWindowDimensions()` hook from react-native instead.
 
 ## Security Considerations
 
-**Dev auto-login hardcoded in production code:**
-- Risk: Test user credentials hardcoded in `insforge.ts` behind `__DEV__` check. If __DEV__ flag is accidentally enabled in release build, app auto-logs in anyone.
-- Files: `services/insforge.ts` (lines 169–181)
-- Current mitigation: `__DEV__` check, expo strip in release builds
-- Recommendations: Move dev credentials to separate dev-only module. Consider removing entirely in favor of QR code/manual auth during testing. Add compile-time assertion that __DEV__ is false in production builds.
+**CORS wildcard on edge functions:**
+- Risk: Both edge functions use `Access-Control-Allow-Origin: *` which allows any origin to call these endpoints.
+- Files: `functions/classify/index.ts` line 17, `functions/summarize/index.ts` line 11
+- Current mitigation: Functions require a valid auth token, so unauthenticated access is blocked.
+- Recommendations: For production, restrict CORS to the specific app origin. For mobile-only backends, consider whether CORS headers are even needed (they are a browser-only concern).
 
-**Email verification code not rate-limited on backend:**
-- Risk: Server endpoint allows unlimited resend of email verification codes without rate limiting
-- Files: `stores/auth.ts` (line 149) calls `resendVerificationEmail()`
-- Current mitigation: No client-side rate limiting
-- Recommendations: Add client-side debounce on resend button (minimum 30s between attempts). Backend should enforce rate limit (e.g., max 5 resends per email per hour).
+**No rate limiting on auth endpoints (client-side):**
+- Risk: The onboarding screen allows unlimited sign-in/sign-up attempts. While server-side rate limiting may exist on InsForge, the client does not throttle or implement exponential backoff.
+- Files: `app/onboarding.tsx` (AuthStep component), `services/insforge.ts` (signIn/signUp functions)
+- Current mitigation: InsForge likely has server-side rate limiting.
+- Recommendations: Add client-side throttling: disable the submit button for 2 seconds after failure, increasing exponentially. Track failed attempts and show a "too many attempts" message after 5 failures.
+
+**Share extension authenticates via stored token with no expiry check:**
+- Risk: The share extension calls `getCurrentUser()` which reads the token from SecureStore and makes an API call. If the token is expired, the API call fails, and in production the user sees "Open Ada to sign in first" with no way to fix it from the extension.
+- Files: `share-extension/index.tsx` line 34, `services/insforge.ts` lines 145-166
+- Current mitigation: Error message directs user to open the main app.
+- Recommendations: When `getCurrentUser()` fails in the share extension, attempt a token refresh before giving up. Store the refresh token in SecureStore alongside the access token.
 
 **No CSRF protection on direct REST auth calls:**
-- Risk: Auth endpoints accept POST without CSRF tokens (lines 51–57 in `services/insforge.ts`)
-- Files: `services/insforge.ts` (lines 49–86)
-- Current mitigation: Auth header with bearer token
-- Recommendations: Verify that InsForge validates auth token on all auth endpoints. If endpoints are truly stateless, CSRF is mitigated, but document this assumption.
+- Risk: Auth endpoints accept POST without CSRF tokens (lines 51-57 in `services/insforge.ts`). This is a mobile app so browser-based CSRF is not applicable, but the endpoints are potentially callable from any HTTP client.
+- Files: `services/insforge.ts` lines 49-86
+- Current mitigation: Auth header with bearer token (anon key for auth endpoints).
+- Recommendations: Low risk for mobile-only use. Document this assumption. Verify InsForge validates the anon key on auth endpoints.
 
-**Realtime channel names include userId in plaintext:**
-- Risk: Channel name `items:${userId}` is visible in network traffic if TLS is compromised
-- Files: `services/insforge.ts` (line 437), `functions/classify/index.ts` (line 124)
-- Current mitigation: TLS encryption in transit
-- Recommendations: Minor risk if InsForge does proper auth on subscriptions. Ensure RLS on items table prevents cross-user access. Consider audit of InsForge security model.
+## Performance Considerations
 
-## Performance Bottlenecks
+**Search re-filters on every keystroke (no debounce):**
+- Problem: `app/(tabs)/search.tsx` line 21 calls `searchItems(query)` on every render when query changes. The `searchItems` function in `stores/items.ts` line 223 iterates all items, joins 6 fields, and does string matching.
+- Files: `app/(tabs)/search.tsx` line 21, `stores/items.ts` lines 223-240
+- Cause: No debounce on the search input. FlatList re-renders on every state change.
+- Improvement path: Debounce the query with a 200-300ms delay using `useRef` + `setTimeout` (same pattern as the note debounce in `app/item/[id].tsx`). Consider memoizing the searchable string per item.
 
-**N+1 item fetch on realtime update:**
-- Problem: Each realtime message causes full state update; no batching of multiple updates
-- Files: `stores/items.ts` (lines 164–180)
-- Cause: Zustand state update triggered on every realtime message, causes re-render even if item not visible
-- Improvement path: Batch realtime updates (e.g., 500ms debounce) before state update. Memoize item list rendering to prevent unnecessary child re-renders.
+**Inbox sorts all items on every render:**
+- Problem: `app/(tabs)/index.tsx` lines 40-52 filters and sorts items in `useMemo` keyed on `[items]`. Since `items` is a new array reference from Zustand on every state change (including realtime updates), the sort runs on every update.
+- Files: `app/(tabs)/index.tsx` lines 40-52
+- Cause: Zustand returns new array references on any state change that touches `items`.
+- Improvement path: Use `shallow` comparison from zustand or select items with a selector that returns a stable reference when the actual data hasn't changed.
 
-**Full items list fetched on app init:**
-- Problem: `fetchItems()` loads ALL items for user without pagination (line 49 in `stores/items.ts`)
-- Files: `stores/items.ts` (lines 46–58), `services/insforge.ts` (lines 226–253)
-- Cause: No limit clause in getItems() query
-- Improvement path: Add cursor-based pagination. Load first 50 items, then lazy-load more on scroll. Consider RLS to ensure user can only fetch their own items.
+**Share extension calls getCurrentUser() which may trigger devAutoLogin network request:**
+- Problem: In development, every share extension invocation potentially makes a sign-in API call (devAutoLogin). This adds network latency to the 2-second window.
+- Files: `services/insforge.ts` lines 145-181, `share-extension/index.tsx` line 34
+- Cause: `devAutoLogin` is called when no token is in SecureStore.
+- Improvement path: In the share extension path, skip devAutoLogin and fail fast if no token exists.
 
-**Search iterates full in-memory items array:**
-- Problem: `searchItems()` filters entire items array on every keystroke (line 206 in `stores/items.ts`)
-- Files: `stores/items.ts` (lines 206–223)
-- Cause: No backend search, all filtering client-side
-- Improvement path: Add ElasticSearch or InsForge full-text search if user base grows. For MVP, acceptable (items load in memory). Add debounce on search input to reduce iterations.
+**Image base64 conversion in edge function uses inefficient char-by-char concatenation:**
+- Problem: `functions/classify/index.ts` lines 159-163 converts image bytes to base64 using `String.fromCharCode` in a loop with string concatenation, which is O(n^2) for large images.
+- Files: `functions/classify/index.ts` lines 159-163
+- Cause: Manual base64 encoding instead of using built-in `btoa` with a typed array view.
+- Improvement path: Use a more efficient approach, e.g., chunk the Uint8Array or use a library. For Deno, `btoa(String.fromCharCode(...new Uint8Array(arrayBuf)))` with spread may work for small images but will stack overflow for large ones. Consider using Deno's built-in base64 encoding.
 
-**Image download in classify function blocks JSON parsing:**
-- Problem: Image base64 conversion happens sequentially before AI call (lines 68–82 in `functions/classify/index.ts`)
-- Files: `functions/classify/index.ts` (lines 68–82)
-- Cause: Image processing and Jina Reader run serially; could be parallelized
-- Improvement path: Run image download and Jina Reader in parallel with `Promise.all()`. Allows Jina to fetch while image downloads.
+## Scalability Considerations
 
-**Realtime connection not pooled across store instances:**
-- Problem: Multiple subscriptions to realtime channel could cause duplicate connections if multiple components subscribe
-- Files: `services/insforge.ts` (lines 433–461)
-- Cause: Each call to `subscribeToItems()` calls `realtime.connect()` without checking if already connected
-- Improvement path: Add singleton pattern or connection state tracker. Reuse connection if already established.
+**All user items loaded in a single query with no pagination:**
+- Current capacity: Works for users with <500 items (typical early adopter).
+- Limit: At 5000+ items, initial load will be slow and memory-heavy. At 50000+ items, the query itself may time out.
+- Scaling path: (1) Add pagination with cursor-based scrolling. (2) Load only recent items on app start (last 7 days or last 50). (3) Add server-side filtering so library/search screens don't need all items in memory.
+- Files: `services/insforge.ts` line 226 (getItems), `stores/items.ts` line 47 (fetchItems)
 
-## Fragile Areas
+**Actions fetched for all items at once:**
+- Current capacity: Fine for <200 actions.
+- Limit: Each classified item can have 1-3 actions. At 5000 items, that's 5000-15000 action rows loaded into memory.
+- Scaling path: Fetch actions lazily per-item or per-page, rather than all at once.
+- Files: `services/insforge.ts` lines 347-364 (getActionsForUser), `stores/actions.ts` line 37 (fetchActions)
 
-**Calendar creation fallback is platform-specific but not tested:**
-- Files: `services/actions.ts` (lines 26–61)
-- Why fragile: Calendar source type differs between iOS and Android; fallback creates local calendar but logic is fragile with hardcoded type casts
-- Safe modification: Add integration tests for calendar creation on both platforms. Mock Calendar API to verify fallback path.
-- Test coverage: No test coverage for `getDefaultCalendarId()` or calendar creation logic
+**Realtime subscription lifecycle not managed:**
+- Current capacity: Works for single-device use.
+- Limit: No reconnection logic if websocket drops. No heartbeat. Multiple app opens could create duplicate subscriptions. `insforge.realtime.connect()` is called with `.then()` but if the promise resolves after the component unmounts (e.g., user navigates away during connection), the subscription is orphaned.
+- Scaling path: Add connection state tracking. Disconnect/reconnect on app foreground/background lifecycle events. Add reconnection logic with exponential backoff.
+- Files: `services/insforge.ts` lines 433-464 (subscribeToItems)
 
-**AI model swap risk in classify/summarize functions:**
-- Files: `functions/classify/index.ts` (line 286), `functions/summarize/index.ts` (line 53)
-- Why fragile: Model names are hardcoded (`openai/gpt-4o-mini`, `anthropic/claude-sonnet-4.5`). If models deprecate or API changes, entire pipeline fails.
-- Safe modification: Move model names to environment variables or constants. Document fallback strategy if model is unavailable.
-- Test coverage: No tests for model selection or fallback behavior
-
-**Jina Reader URL extraction assumes specific response format:**
-- Files: `functions/classify/index.ts` (lines 172–195)
-- Why fragile: Code assumes Jina returns plain text response; if API changes format or returns HTML, content parsing fails silently (line 184 fallback to raw URL)
-- Safe modification: Add content-type validation on Jina response. Log actual response format in errors.
-- Test coverage: No tests for Jina Reader failure scenarios
-
-**Action data type casting without validation:**
-- Files: `app/item/[id].tsx` (lines 220, 222), `services/actions.ts` (lines 66, 103)
-- Why fragile: Action data cast to specific types without runtime validation (e.g., `as CalendarActionData`). If server returns unexpected structure, undefined field access crashes app.
-- Safe modification: Add type guard functions to validate action data shapes before casting.
-- Test coverage: No tests for malformed action data from server
-
-**Heuristic classifier keyword matching assumes stable category keywords:**
-- Files: `services/classifier.ts` (lines 76–89)
-- Why fragile: Keyword matching depends on CATEGORIES definitions (line 12). If keywords are edited, classification behavior changes silently.
-- Safe modification: Add unit tests that verify specific keywords map to expected categories. Document category keyword requirements.
-- Test coverage: Tests exist (`__tests__/classifier.test.ts`) but don't cover all keyword edge cases
-
-## Scaling Limits
-
-**Realtime channel subscription doesn't handle large user bases:**
-- Current capacity: Each user gets one realtime channel. Works for MVP.
-- Limit: If 10k+ concurrent users, InsForge realtime infrastructure could saturate
-- Scaling path: Implement connection pooling. Consider switching to webhook-based updates for non-real-time use cases.
-
-**Items table without indexes on common filters:**
-- Current capacity: Assuming <10k items per user, full table scans acceptable
-- Limit: Once users have >100k items, unindexed queries (category, status) will slow down
-- Scaling path: Add database indexes on `(user_id, status)`, `(user_id, category)`, `(user_id, created_at)` via InsForge migrations.
-
-**Image storage in single bucket with no partitioning:**
-- Current capacity: InsForge S3 bucket stores all user images without organization
-- Limit: As object count grows, listing/cleanup becomes slow
-- Scaling path: Partition storage by user_id prefix (e.g., `s3://item-images/user-id-123/...`). Add lifecycle rules to archive old images.
-
-**AI Gateway rate limits (Gemini + Claude):**
-- Current capacity: Gemini free tier = 1,000 RPD / 15 RPM for gpt-4o-mini. Claude Sonnet = rate varies.
-- Limit: If >15 concurrent classification requests, queue will back up
-- Scaling path: Implement per-user rate limiting client-side. Add queue with priority for urgent items. Upgrade to paid tier if MVP gains traction.
+**AI Gateway rate limits:**
+- Current capacity: gpt-4o-mini via InsForge AI Gateway (unknown rate limits). Claude Sonnet for summarization.
+- Limit: If many users classify items concurrently, the AI gateway becomes the bottleneck. No client-side queuing or backoff.
+- Scaling path: Implement per-user rate limiting. Add a queue with priority for urgent items. Consider fallback to heuristic classification when AI is unavailable.
+- Files: `functions/classify/index.ts` line 291 (AI call), `functions/summarize/index.ts` line 66 (AI call)
 
 ## Dependencies at Risk
 
-**expo-calendar with platform-specific issues:**
-- Risk: Calendar source type requires `type` field on iOS and Android but type differs between platforms (line 48 in `services/actions.ts`)
-- Impact: Calendar events may fail to create if source type is wrong
-- Migration plan: If issues persist, consider simpler calendar integration (e.g., opening calendar app with event data as URL params) or switch to user-facing calendar selection flow.
+**InsForge SDK (@insforge/sdk):**
+- Risk: Single-vendor dependency for database, auth, storage, functions, realtime, and AI. The SDK's auth module doesn't work in React Native (requires browser APIs), forcing custom REST calls for auth.
+- Impact: If InsForge has an outage, the entire app is non-functional. No offline capability.
+- Migration plan: The REST-based auth layer in `services/insforge.ts` is already decoupled. Database operations use a Supabase-like query builder, so migration to Supabase would be straightforward. AI gateway uses OpenAI-compatible API.
 
-**insforge/sdk browser-dependent auth module:**
-- Risk: InsForge SDK auth module relies on `document.cookie` / `localStorage` which don't exist in React Native. Had to build custom REST auth layer.
-- Impact: Any SDK updates may break auth if they change API assumptions
-- Migration plan: Monitor InsForge SDK releases. Consider request to InsForge to provide React Native auth mode or switch to direct REST API entirely.
-
-**expo-secure-store not encrypted on Android <5:**
-- Risk: SecureStore uses SharedPreferences fallback on older Android versions, which is not encrypted
-- Impact: Auth token could be readable if device is physically compromised
-- Migration plan: Document minimum Android 5 requirement. Consider warning on older devices.
-
-**Gemini Flash-Lite context size (32K tokens):**
-- Risk: Classification prompt + large extracted text could exceed context window
-- Impact: AI call fails or returns truncated response
-- Mitigation: Jina Reader truncates at 15,000 chars (line 188 in `functions/classify/index.ts`) and text content is capped by share extension (line 105 in `services/share-handler.ts`)
-- Recommendation: Test with actual large URLs (e.g., Wikipedia articles) to verify truncation is sufficient.
+**expo-calendar platform-specific quirks:**
+- Risk: Calendar source type requires `type` field that differs between iOS and Android. Line 49 in `services/actions.ts` casts `Calendar.CalendarType.LOCAL as string` which is fragile.
+- Impact: Calendar event creation may fail on certain devices/OS versions.
+- Migration plan: If issues persist, consider simpler calendar integration (opening calendar app with event URL) or adding user-facing calendar selection.
 
 ## Missing Critical Features
 
-**No conflict resolution for simultaneous item edits:**
-- Problem: If user edits note while realtime update arrives, local state could diverge from server
-- Blocks: Multi-device sync, offline mode
-- Fix approach: Implement last-write-wins (timestamp-based) or operational transformation (OT). For MVP, acceptable to lose local edit if realtime update arrives.
+**No offline support:**
+- Problem: The app requires network connectivity for every operation. Items cannot be queued offline, and there is no local cache.
+- Blocks: Users cannot use the share extension without connectivity. The 2-second dismiss target in the share extension becomes impossible on slow networks.
+- Files: `services/share-handler.ts` (processSharedContent requires network), `share-extension/index.tsx`
 
-**No support for image compression before upload:**
-- Problem: Share extension allows 5MB images but doesn't compress; could hit bandwidth limits on slow networks
-- Blocks: Large-scale image sharing
-- Fix approach: Add image compression utility using `react-native-image-resizer` before upload.
-
-**No offline support — all data is remote-first:**
-- Problem: User can't view previously loaded items if network is down
-- Blocks: Offline-first usage
-- Fix approach: Cache items in local SQLite (via `expo-sqlite`). Implement sync queue for offline actions. Requires significant architecture change.
+**No retry mechanism for failed classifications:**
+- Problem: If `triggerClassify()` fails silently, items stay "pending" forever. There is a "Re-classify" button on the detail screen (`app/item/[id].tsx` line 314), but users must manually find and tap it.
+- Blocks: Reliable background processing. Users with intermittent connectivity will accumulate unclassified items.
+- Files: `services/insforge.ts` line 409 (triggerClassify), `stores/items.ts` line 115 (reclassify)
 
 ## Test Coverage Gaps
 
-**Calendar creation not tested:**
-- What's not tested: `getDefaultCalendarId()`, calendar event creation, fallback calendar creation on missing primary calendar
-- Files: `services/actions.ts` (lines 26–61)
-- Risk: Calendar code could break and not be caught until user tests it manually
-- Priority: High — core action type
+**No tests for edge functions (HIGH):**
+- What's not tested: `functions/classify/index.ts` and `functions/summarize/index.ts` have zero test coverage. These contain the core AI classification pipeline, Jina Reader integration, JSON parsing of AI responses, error handling, and realtime publishing.
+- Files: `functions/classify/index.ts` (332 lines), `functions/summarize/index.ts` (172 lines)
+- Risk: AI response parsing is the most fragile part of the system (JSON from an LLM). The fallback in `classifyWithAI` (lines 308-316) handles parse failure, but there are no tests for malformed responses, missing fields, or edge cases.
+- Priority: High
 
-**Realtime subscription edge cases:**
-- What's not tested: Realtime connection failure, message arrival while disconnected, duplicate subscriptions
-- Files: `services/insforge.ts` (lines 433–461), `stores/items.ts` (lines 163–185)
-- Risk: Realtime updates could silently fail and user sees stale data
-- Priority: High — critical for UX
+**No tests for UI screens (MEDIUM):**
+- What's not tested: All 10 screen components in `app/` have zero test coverage. No component tests, no snapshot tests, no interaction tests.
+- Files: All files in `app/`, `share-extension/index.tsx`
+- Risk: UI regressions will not be caught. Navigation logic in `app/_layout.tsx` (auth gate) is untested despite being critical.
+- Priority: Medium -- the auth gate routing logic in `_layout.tsx` lines 33-52 is the highest priority for testing.
 
-**Share extension timeout scenarios:**
-- What's not tested: Network timeout during image upload, classification trigger failure, share extension abort signals
-- Files: `share-extension/index.tsx`, `services/share-handler.ts`
-- Risk: Share extension could hang or dismiss without saving on slow networks
-- Priority: Medium — affects first-time user experience
+**No integration tests for InsForge service functions (MEDIUM):**
+- What's not tested: `insforge-service.test.ts` only tests error classes. The actual `saveItem`, `getItems`, `updateItem`, `signIn`, `signUp`, `uploadImage`, `subscribeToItems` functions are not directly tested.
+- Files: `__tests__/insforge-service.test.ts` (185 lines, error classes only), `services/insforge.ts` (490 lines)
+- Risk: Database operations, auth flows, and storage uploads have no direct tests. They are partially covered through store tests, but store tests mock the service layer entirely.
+- Priority: Medium
 
-**Classify function JSON parsing fallback:**
-- What's not tested: AI response with invalid JSON, missing required fields, extra fields in response
-- Files: `functions/classify/index.ts` (lines 293–311)
-- Risk: Malformed AI response silently falls back to low-confidence classification with empty actions
-- Priority: Medium — could cause poor categorization
-
-**Action execution error handling:**
-- What's not tested: Calendar permission denial, invalid reminder time, network failure during action execute
-- Files: `services/actions.ts` (lines 145–169), `stores/actions.ts` (lines 51–70)
-- Risk: Action execution failures could leave actions in inconsistent state (marked completed but not actually executed)
-- Priority: High — affects data integrity
-
-**URL pattern matching edge cases:**
-- What's not tested: Malformed URLs, redirects, IDNs (international domain names), URL with query params vs. without
-- Files: `utils/url-patterns.ts`
-- Risk: Classification could misidentify content type based on URL pattern alone
-- Priority: Low — Gemini should catch misclassifications
+**No tests for action execution with native APIs (LOW):**
+- What's not tested: `services/actions.ts` executeCalendarAction and executeReminderAction edge cases -- permission denied mid-flow, invalid date strings in action_data, notification scheduling with past dates.
+- Files: `__tests__/actions.test.ts`, `services/actions.ts`
+- Risk: Action execution touches native APIs (expo-calendar, expo-notifications) that behave differently on device vs simulator.
+- Priority: Low -- integration-level concerns best tested on device.
 
 ---
 

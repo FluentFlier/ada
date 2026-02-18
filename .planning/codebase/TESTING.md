@@ -2,153 +2,222 @@
 
 **Analysis Date:** 2026-02-18
 
-## Test Framework
+## Framework & Config
 
 **Runner:**
-- Vitest 2.0.0
+- Vitest 2.x (`vitest` in `devDependencies`)
 - Config: `vitest.config.ts`
-- Environment: Node (not jsdom/happy-dom, tests are service/logic focused)
-- Globals enabled: `describe`, `it`, `expect` available without imports
+- Environment: `node` (no jsdom -- tests focus on services/logic, not UI rendering)
+- Globals enabled: `globals: true` -- `describe`, `it`, `expect` available without import
 
 **Assertion Library:**
-- Vitest built-in expect() (Chai-compatible)
+- Vitest built-in `expect()` (Chai-compatible matchers)
+
+**Path Alias:**
+- `@/` resolves to project root via `resolve.alias` in `vitest.config.ts`
 
 **Run Commands:**
 ```bash
-npm test                # Run all tests (vitest run)
-npm run test:watch     # Watch mode (vitest watch)
+npx vitest run              # Run all tests (190 tests, ~700ms)
+npx vitest watch            # Watch mode
+npm test                    # Alias for vitest run
+npm run test:watch          # Alias for vitest watch
 ```
 
-Test coverage not measured; no coverage config present.
+**Config file (`vitest.config.ts`):**
+```typescript
+import { defineConfig } from 'vitest/config';
+import path from 'path';
 
-## Test File Organization
-
-**Location:**
-- Co-located: `__tests__/` directory at repo root
-- Test naming: `[source-name].test.ts`
-- One test file per source module
-
-**Examples:**
-- `services/classifier.ts` → `__tests__/classifier.test.ts`
-- `stores/items.ts` → `__tests__/items-store.test.ts`
-- `utils/format.ts` → `__tests__/format.test.ts`
-- `services/actions.ts` → `__tests__/actions.test.ts`
-
-**Current test files (11 total):**
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    include: ['__tests__/**/*.test.ts'],
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, '.'),
+    },
+  },
+});
 ```
-__tests__/
-├── classifier.test.ts
-├── format.test.ts
-├── url-patterns.test.ts
-├── categories.test.ts
-├── share-handler.test.ts
-├── insforge-service.test.ts
-├── insforge-queries.test.ts
-├── auth-store.test.ts
-├── items-store.test.ts
-├── actions-store.test.ts
-└── actions.test.ts
-```
+
+## Test Files
+
+| File | Tests | What's Tested |
+|------|-------|---------------|
+| `__tests__/url-patterns.test.ts` | 16 | `matchUrlToCategory`, `extractDomain`, `isLikelyUrl` -- domain-to-category mapping, URL detection |
+| `__tests__/classifier.test.ts` | 12 | `classifyHeuristic` -- URL classification, keyword matching, data extraction, action suggestions |
+| `__tests__/format.test.ts` | 13 | `timeAgo`, `truncate`, `cleanUrl`, `confidenceLabel`, `capitalize` -- all formatting utils |
+| `__tests__/categories.test.ts` | 22 | `CATEGORIES` structure validation, `CATEGORY_LIST`, `getCategoryDef` -- data integrity |
+| `__tests__/share-handler.test.ts` | 5 | Content type detection via `classifyHeuristic` -- URL, text, empty, rich text |
+| `__tests__/insforge-service.test.ts` | 17 | Error classes (`AuthError`, `DatabaseError`, `StorageError`, `FunctionError`) -- hierarchy, cause preservation |
+| `__tests__/insforge-queries.test.ts` | 9 | `toggleStar`, `updateUserNote`, `getActionsForUser` -- database query builder mocking |
+| `__tests__/auth-store.test.ts` | 15 | `useAuthStore` -- initialize, signUp, signIn, verifyEmail, resendCode, signOut, clearError, resetVerification |
+| `__tests__/items-store.test.ts` | 22 | `useItemsStore` -- fetchItems, refreshItem, archiveItem, deleteItem, reclassify, toggleStar, updateNote, startRealtime, derived accessors |
+| `__tests__/actions-store.test.ts` | 10 | `useActionsStore` -- fetchActions, executeAndUpdate, dismissAction, getPending, getCompleted, getForItem |
+| `__tests__/actions.test.ts` | 19 | `executeAction` dispatcher, `executeCalendarAction`, `executeReminderAction`, `executeSummarizeAction`, `ActionError` |
+
+**Totals:** 11 test files, 190 tests, all passing.
 
 ## Test Structure
 
-**Suite Organization:**
+**Suite Organization -- nested `describe` blocks per function:**
 
 ```typescript
-describe('classifyHeuristic', () => {
-  it('classifies YouTube URL as entertainment', () => {
-    // Arrange
-    const result = classifyHeuristic({
-      content: 'https://youtube.com/watch?v=abc123',
-      type: 'link',
-    });
-
-    // Assert
-    expect(result.category).toBe('entertainment');
-    expect(result.confidence).toBeGreaterThan(0.5);
+describe('items store', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetStore();
   });
 
-  it('extracts prices from text', () => {
-    const result = classifyHeuristic({
-      content: 'Great deal on headphones for $49.99!',
-      type: 'text',
-    });
-    expect(result.extracted_data.prices).toBeDefined();
-    expect(result.extracted_data.prices![0].amount).toBe(49.99);
+  describe('fetchItems', () => {
+    it('loads items into state', async () => { /* ... */ });
+    it('sets error on failure', async () => { /* ... */ });
+  });
+
+  describe('archiveItem', () => {
+    it('optimistically sets status to archived', async () => { /* ... */ });
+    it('rolls back to previous state on API failure', async () => { /* ... */ });
+  });
+
+  describe('derived accessors', () => {
+    describe('getByStatus', () => { /* ... */ });
+    describe('getByCategory', () => { /* ... */ });
+    describe('searchItems', () => { /* ... */ });
   });
 });
 ```
 
-**Patterns:**
-- One `describe()` per function/class
-- Test names are behaviors: `test_returns_error_when_input_is_empty` style (naming via verb phrases)
-- Arrange-Act-Assert (AAA) structure implicit (no explicit comments)
-- Avoid testing implementation, test observable behavior
-- Each test has one reason to fail
+**Test Naming -- behavior-focused verb phrases:**
+- `'classifies YouTube URL as entertainment'`
+- `'optimistically sets status to archived'`
+- `'rolls back to previous state on API failure'`
+- `'returns null for unknown domains'`
+- `'handles empty content gracefully'`
 
-## Mocking
+**Each test has one reason to fail.** No multi-assertion tests where failure is ambiguous.
 
-**Framework:** vitest's `vi` module
+## Mock Patterns
 
-**Mock Setup Pattern:**
+**Framework:** Vitest `vi` module
+
+### Pattern 1: Simple module mock (most common)
+
+Used for `@/services/insforge`, `expo-secure-store`, `@/services/actions`:
+
 ```typescript
-// Mock before importing the tested module
+// Mock entire module with inline factory
+vi.mock('@/services/insforge', () => ({
+  getItems: vi.fn(),
+  getItemById: vi.fn(),
+  archiveItem: vi.fn(),
+  deleteItem: vi.fn(),
+  toggleStar: vi.fn(),
+  subscribeToItems: vi.fn(),
+  triggerClassify: vi.fn(),
+  DatabaseError: class DatabaseError extends Error {
+    cause: unknown;
+    constructor(message: string, cause?: unknown) {
+      super(message);
+      this.name = 'DatabaseError';
+      this.cause = cause;
+    }
+  },
+}));
+
+// Import mocked functions for test control (after vi.mock)
+import {
+  getItems as mockGetItems,
+  archiveItem as mockArchiveItem,
+} from '@/services/insforge';
+```
+
+### Pattern 2: Expo native module mock
+
+Used for `expo-calendar`, `expo-notifications`, `react-native`:
+
+```typescript
 vi.mock('expo-calendar', () => ({
   requestCalendarPermissionsAsync: vi.fn(),
   getCalendarsAsync: vi.fn(),
+  createCalendarAsync: vi.fn(),
   createEventAsync: vi.fn(),
   EntityTypes: { EVENT: 'event' },
   CalendarType: { LOCAL: 'local' },
+  CalendarAccessLevel: { OWNER: 'owner' },
+}));
+```
+
+### Pattern 3: SDK chain mock with `vi.hoisted`
+
+Used in `__tests__/insforge-queries.test.ts` for mocking the InsForge SDK's chainable query builder:
+
+```typescript
+const {
+  mockDatabase, mockSelect, mockEq, mockOrder, mockUpdate,
+} = vi.hoisted(() => ({
+  mockDatabase: { from: vi.fn() },
+  mockSelect: vi.fn(),
+  mockEq: vi.fn(),
+  mockOrder: vi.fn(),
+  mockUpdate: vi.fn(),
 }));
 
-// Mock dependencies
-vi.mock('@/services/insforge', () => ({
-  updateActionStatus: vi.fn(),
-  triggerSummarize: vi.fn(),
-}));
-
-// Import mocks for control
-import {
-  updateActionStatus as mockUpdateActionStatus,
-} from '@/services/insforge';
-
-describe('actions service', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();  // Clear between tests
+function setupChain(finalResult: { data: unknown; error: unknown }) {
+  mockSelect.mockReturnValue({
+    eq: mockEq,
+    order: mockOrder,
+    then: (resolve: (v: unknown) => void) => resolve(finalResult),
   });
-
-  it('calls updateActionStatus', async () => {
-    vi.mocked(mockUpdateActionStatus).mockResolvedValue(undefined);
-
-    // ... test ...
-
-    expect(mockUpdateActionStatus).toHaveBeenCalledWith('a1', 'completed');
+  mockEq.mockReturnValue({
+    eq: mockEq,
+    select: mockSelect,
+    then: (resolve: (v: unknown) => void) => resolve(finalResult),
   });
+  // ... setup full chain
+  mockDatabase.from.mockReturnValue({
+    select: mockSelect,
+    update: mockUpdate,
+  });
+}
+```
+
+### Mock Rules
+
+**What to mock:**
+- External SDKs and native modules: `@insforge/sdk`, `expo-calendar`, `expo-notifications`, `expo-secure-store`
+- Service modules when testing stores: `@/services/insforge`, `@/services/actions`
+- `react-native` Platform when needed: `vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }))`
+
+**What NOT to mock:**
+- Pure utility functions: `utils/format.ts`, `utils/url-patterns.ts` -- test them directly
+- Constants: `CATEGORIES`, `CONFIG`, `DOMAIN_RULES` -- use real data
+- The module being tested itself
+
+**Between tests:** Always `vi.clearAllMocks()` in `beforeEach`:
+
+```typescript
+beforeEach(() => {
+  vi.clearAllMocks();
+  resetStore();
 });
 ```
 
-**What to Mock:**
-- External dependencies: expo modules, InsForge SDK, SecureStore
-- Service modules called by the code under test
-- Never mock the module being tested
+**Type-safe mock control:** Use `vi.mocked()`:
 
-**What NOT to Mock:**
-- Pure utilities: `utils/format.ts`, `utils/url-patterns.ts`
-- Type definitions
-- Constants (CATEGORIES, DOMAIN_RULES)
-- Heuristic classification logic when testing stores that depend on it
-
-**Mocking Strategy:**
-- Use factory functions to create mock objects inline: `vi.fn().mockResolvedValue(data)`
-- Clear all mocks before each test: `beforeEach(() => vi.clearAllMocks())`
-- Type mocks correctly: `vi.mocked(mockFunction)` to get proper TypeScript support
+```typescript
+vi.mocked(mockGetItems).mockResolvedValue(items);
+vi.mocked(mockArchiveItem).mockRejectedValue(new Error('fail'));
+```
 
 ## Fixtures and Factories
 
-**Test Data Factory:**
+**Factory function pattern -- one per major type:**
 
 ```typescript
-// From items-store.test.ts
+// From __tests__/items-store.test.ts
 function makeItem(overrides: Partial<Item> = {}): Item {
   return {
     id: 'item-1',
@@ -172,64 +241,81 @@ function makeItem(overrides: Partial<Item> = {}): Item {
 }
 ```
 
+```typescript
+// From __tests__/actions-store.test.ts
+function makeAction(overrides: Partial<Action> = {}): Action {
+  return {
+    id: 'act-1',
+    user_id: 'u1',
+    item_id: 'item-1',
+    type: 'add_to_calendar',
+    status: 'suggested',
+    action_data: { label: 'Test action' },
+    result: null,
+    created_at: '2026-02-18T00:00:00Z',
+    completed_at: null,
+    ...overrides,
+  };
+}
+```
+
 **Usage:**
 ```typescript
 const items = [makeItem({ id: 'a' }), makeItem({ id: 'b' })];
-const item = makeItem({ status: 'classified', category: 'travel' });
+const item = makeItem({ id: 'a1', status: 'classified', category: 'travel' as Category });
 ```
 
-**Location:**
-- Defined at top of test file, after imports and mocks
-- One factory per major type tested
-- From `auth-store.test.ts`: no factory (simpler fixtures), data passed inline to mocks
-
-**Reset Functions:**
-
+**Store reset helpers:**
 ```typescript
 function resetStore() {
-  useItemsStore.setState({
-    items: [],
-    loading: false,
-    error: null,
-  });
+  useItemsStore.setState({ items: [], loading: false, error: null });
 }
+```
 
-describe('items store', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    resetStore();
-  });
-});
+**Location:** Factory functions defined at top of each test file, after imports and mocks.
+
+## Coverage
+
+**Requirements:** None enforced. No coverage config, no CI threshold.
+
+**No coverage command configured.** To add coverage:
+```bash
+npx vitest run --coverage
 ```
 
 ## Test Types
 
-**Unit Tests:**
-- Scope: Single function/store action
-- Approach: Mock all dependencies, test pure logic or state transitions
-- Examples:
-  - `classifier.test.ts`: heuristic classification logic (pure functions, no mocks)
-  - `format.test.ts`: formatting utilities (pure functions, fake time with `vi.useFakeTimers()`)
-  - `auth-store.test.ts`: auth state transitions (mocks insforge + SecureStore)
+**Unit Tests (pure functions, no mocks):**
+- `__tests__/classifier.test.ts` -- heuristic classification logic
+- `__tests__/format.test.ts` -- formatting utilities (uses `vi.useFakeTimers()` for time)
+- `__tests__/url-patterns.test.ts` -- URL pattern matching
+- `__tests__/categories.test.ts` -- category data integrity validation
 
-**Integration Tests:**
-- Scope: Multiple modules interacting
-- Approach: Mock I/O boundaries (API, filesystem), test orchestration
-- Examples:
-  - `items-store.test.ts`: store mutations + API calls (mocks insforge, tests realtime flow)
-  - `actions.test.ts`: action execution service calling expo-calendar/notifications + InsForge
-  - `insforge-queries.test.ts`: database query builders (mocks SDK responses)
+**Unit Tests (mocked dependencies):**
+- `__tests__/insforge-service.test.ts` -- error class behavior
+- `__tests__/insforge-queries.test.ts` -- database query functions
+- `__tests__/auth-store.test.ts` -- auth state transitions
+- `__tests__/items-store.test.ts` -- items state transitions + optimistic updates
+- `__tests__/actions-store.test.ts` -- actions state transitions
+
+**Integration Tests (multiple modules interacting):**
+- `__tests__/actions.test.ts` -- action execution dispatching through expo-calendar, expo-notifications, and InsForge
+- `__tests__/share-handler.test.ts` -- share handler feeding into classifier
 
 **E2E Tests:**
-- Not present; Expo + React Native apps typically use detox or similar
-- Ada testing is unit + integration focused
+- Not present. No Detox or Maestro setup.
+
+**Not tested:**
+- UI components (screens in `app/`)
+- Edge functions (`functions/classify/index.ts`, `functions/summarize/index.ts`)
+- React hooks
+- Real API integration
 
 ## Common Patterns
 
-**Async Testing:**
+### Async Testing
 
 ```typescript
-// From items-store.test.ts
 it('loads items into state', async () => {
   const items = [makeItem({ id: 'a' }), makeItem({ id: 'b' })];
   vi.mocked(mockGetItems).mockResolvedValue(items);
@@ -239,51 +325,52 @@ it('loads items into state', async () => {
   const state = useItemsStore.getState();
   expect(state.items).toEqual(items);
   expect(state.loading).toBe(false);
+  expect(state.error).toBeNull();
 });
 ```
 
-**Key points:**
-- `async/await` always used
-- Mock returns: `.mockResolvedValue()` for success, `.mockRejectedValue()` for errors
-- State checked after await completes
-- No callbacks or `.then()` chains
-
-**Error Testing:**
+### Error Testing
 
 ```typescript
-// From auth-store.test.ts
+// Test domain-specific error message
 it('sets AuthError message on auth failure', async () => {
   vi.mocked(mockSignUp).mockRejectedValue(
-    new AuthError('Email already registered')
+    new AuthError('Email already registered'),
   );
 
   await useAuthStore.getState().signUp('a@b.com', 'pass');
 
-  const state = useAuthStore.getState();
-  expect(state.error).toBe('Email already registered');
-  expect(state.loading).toBe(false);
+  expect(useAuthStore.getState().error).toBe('Email already registered');
+  expect(useAuthStore.getState().loading).toBe(false);
 });
 
-// Generic error fallback
+// Test generic fallback message
 it('sets generic message on unknown error', async () => {
   vi.mocked(mockSignUp).mockRejectedValue(new Error('boom'));
 
   await useAuthStore.getState().signUp('a@b.com', 'pass');
 
-  expect(useItemsStore.getState().error).toBe(
+  expect(useAuthStore.getState().error).toBe(
     'Sign up failed. Please try again.',
+  );
+});
+
+// Test thrown errors (services)
+it('throws ActionError for unknown action type', async () => {
+  const action = makeAction({ type: 'unknown_action' as Action['type'] });
+  await expect(executeAction(action)).rejects.toThrow(ActionError);
+  await expect(executeAction(action)).rejects.toThrow(
+    'Unknown action type: unknown_action',
   );
 });
 ```
 
-**Optimistic Updates Testing:**
+### Optimistic Update + Rollback Testing
 
 ```typescript
-// From items-store.test.ts
 it('optimistically sets status to archived', async () => {
   const item = makeItem({ id: 'a1', status: 'classified' });
   useItemsStore.setState({ items: [item] });
-
   vi.mocked(mockArchiveItem).mockResolvedValue(undefined);
 
   await useItemsStore.getState().archiveItem('a1');
@@ -294,40 +381,17 @@ it('optimistically sets status to archived', async () => {
 it('rolls back to previous state on API failure', async () => {
   const item = makeItem({ id: 'a1', status: 'classified' });
   useItemsStore.setState({ items: [item] });
-
   vi.mocked(mockArchiveItem).mockRejectedValue(new Error('fail'));
 
   await useItemsStore.getState().archiveItem('a1');
 
-  // Should restore original items (not archived)
   expect(useItemsStore.getState().items[0].status).toBe('classified');
 });
 ```
 
-**Derived Accessors Testing:**
+### Time-Based Testing
 
 ```typescript
-// From items-store.test.ts
-describe('getByCategory', () => {
-  it('returns non-archived items in category', () => {
-    const travel = useItemsStore
-      .getState()
-      .getByCategory('travel' as Category);
-    expect(travel).toHaveLength(1);
-    expect(travel[0].id).toBe('1');
-  });
-
-  it('excludes archived items', () => {
-    const travel = useItemsStore.getState().getByCategory('travel');
-    expect(travel.every((i) => i.status !== 'archived')).toBe(true);
-  });
-});
-```
-
-**Time-Based Testing:**
-
-```typescript
-// From format.test.ts
 describe('timeAgo', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -341,13 +405,16 @@ describe('timeAgo', () => {
   it('returns just now for timestamps under a minute', () => {
     expect(timeAgo('2026-02-18T11:59:30Z')).toBe('just now');
   });
+
+  it('returns minutes for recent timestamps', () => {
+    expect(timeAgo('2026-02-18T11:55:00Z')).toBe('5m ago');
+  });
 });
 ```
 
-**Store Realtime Subscription Testing:**
+### Realtime Subscription Testing
 
 ```typescript
-// From items-store.test.ts
 it('updates existing item via realtime callback', () => {
   const item = makeItem({ id: 'rt1', title: null });
   useItemsStore.setState({ items: [item] });
@@ -366,63 +433,57 @@ it('updates existing item via realtime callback', () => {
   const updated = makeItem({ id: 'rt1', title: 'Now classified' });
   realtimeCallback(updated);
 
-  expect(useItemsStore.getState().items[0].title).toBe(
-    'Now classified',
-  );
+  expect(useItemsStore.getState().items[0].title).toBe('Now classified');
 });
 ```
 
-## Edge Case Coverage
+### Parameterized Tests
 
-**Tested consistently:**
-- Empty inputs: `it('returns empty for no matches', () => { ... })`
-- Null/undefined: `it('handles null/undefined', () => { expect(...).toBe('') })`
-- Boundary values: confidence scores 0.85, 0.6, <0.6
-- Error paths: every action tested with success and failure
-- Rollback scenarios: optimistic updates tested with failure + rollback
-- Missing resources: `it('returns empty array for no matches', () => { ... })`
+```typescript
+// From __tests__/categories.test.ts
+it.each(ALL_CATEGORY_IDS)(
+  'category "%s" has required fields',
+  (id) => {
+    const cat = CATEGORIES[id];
+    expect(cat.label).toBeTruthy();
+    expect(cat.icon).toBeTruthy();
+    expect(cat.color).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    expect(Array.isArray(cat.keywords)).toBe(true);
+  },
+);
+```
 
-**Example coverage from classifier.test.ts:**
-- Unrecognizable content → falls back to 'other'
-- Mixed content (price + date + contacts) → limits actions to 3 max
-- Empty content → returns valid shape with 'other' category
-- All content types tested: link, text
+## Test Conventions
 
-## Assertion Patterns
+**Naming:** Behavior-focused phrases starting with a verb:
+- `'classifies YouTube URL as entertainment'`
+- `'returns null for unknown domains'`
+- `'rolls back on API failure'`
+- `'handles empty content gracefully'`
 
-**Common expectations:**
+**Edge cases to always test:**
+- Empty inputs / empty strings
+- Null/undefined values
+- Error paths for every success path
+- Rollback for every optimistic update
+- Boundary values (confidence thresholds: 0.85, 0.6)
+- Unknown/unrecognized inputs (unknown domains, unknown action types)
+
+**Assertion Patterns Used:**
 - Exact matches: `expect(value).toBe(expected)`
-- Array membership: `expect(array).toHaveLength(3)`, `expect(array).toContain(item)`
-- Type checks: `expect(value).toBeDefined()`, `expect(value).toBeNull()`
-- Truthy/falsy: `expect(bool).toBe(true)`, `expect(result).toBeFalsy()`
+- Deep equality: `expect(array).toEqual([...])`
+- Array length: `expect(array).toHaveLength(3)`
+- Defined/null: `expect(value).toBeDefined()`, `expect(value).toBeNull()`
 - Ranges: `expect(score).toBeGreaterThan(0.5)`, `expect(score).toBeLessThan(0.85)`
-- Mock calls: `expect(mockFn).toHaveBeenCalled()`, `expect(mockFn).toHaveBeenCalledWith(args)`
-- Collections: `expect(array).toEqual([...])` (deep equality)
+- Mock verification: `expect(mockFn).toHaveBeenCalledWith(args)`
+- Thrown errors: `await expect(fn()).rejects.toThrow('message')`
+- Pattern matching: `expect(str).toMatch(/regex/)`
+- Object containment: `expect.objectContaining({ key: value })`
 
 **Not used:**
-- Snapshots (no `.toMatchSnapshot()`)
+- Snapshot testing (no `.toMatchSnapshot()`)
 - Custom matchers
-- `toBeDefined()` rarely; prefer explicit checks
-
-## Notes on Current Coverage
-
-**Well-tested:**
-- Service layer: `insforge.ts`, `actions.ts` (mocked I/O, happy paths + errors)
-- State management: all store files (optimistic updates, error handling, derived accessors)
-- Pure utilities: `format.ts`, `url-patterns.ts`, `classifier.ts` (comprehensive edge cases)
-
-**Not tested yet:**
-- UI components (screens, share extension)
-- Edge functions themselves (`functions/classify/index.ts`, `functions/summarize/index.ts`)
-- React hooks (none explicitly tested; integrated into components)
-- Real API integration (all mocked)
-
-**Philosophy:**
-- Test behavior, not implementation
-- All async code tested
-- All state transitions covered
-- Error paths required
-- Mocks are conservative (mock external dependencies, not internals)
+- Test hooks like `vi.spyOn` (all mocks are module-level `vi.mock`)
 
 ---
 
