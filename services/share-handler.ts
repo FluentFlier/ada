@@ -97,8 +97,12 @@ export async function processSharedContent(
     }
   }
 
-  // Fire and forget — don't wait for classification
-  triggerClassify(item.id).catch((err: unknown) => {
+  // Fire and forget — pass item data to skip DB fetch in edge function
+  triggerClassify(item.id, {
+    type: item.type,
+    raw_content: item.raw_content,
+    user_id: userId,
+  }).catch((err: unknown) => {
     console.warn('triggerClassify fire-and-forget failed:', err);
   });
 

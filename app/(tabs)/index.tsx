@@ -80,7 +80,11 @@ export default function InboxScreen() {
     try {
       const item = await saveItem(user.id, { type, content: trimmed });
       prependItem(item);
-      triggerClassify(item.id).catch(() => {});
+      triggerClassify(item.id, {
+        type,
+        raw_content: trimmed,
+        user_id: user.id,
+      }).catch(() => {});
       setAddText('');
       setShowAddInput(false);
     } catch (err) {
