@@ -15,6 +15,7 @@ const {
   mockInsert,
   mockSingle,
   mockLimit,
+  mockRange,
 } = vi.hoisted(() => ({
   mockDatabase: { from: vi.fn() },
   mockSelect: vi.fn(),
@@ -24,6 +25,7 @@ const {
   mockInsert: vi.fn(),
   mockSingle: vi.fn(),
   mockLimit: vi.fn(),
+  mockRange: vi.fn(),
 }));
 
 function setupChain(finalResult: {
@@ -37,6 +39,7 @@ function setupChain(finalResult: {
     order: mockOrder,
     single: mockSingle,
     limit: mockLimit,
+    range: mockRange,
     then: (resolve: (v: unknown) => void) =>
       resolve(finalResult),
   });
@@ -45,12 +48,19 @@ function setupChain(finalResult: {
     select: mockSelect,
     order: mockOrder,
     single: mockSingle,
+    range: mockRange,
     then: (resolve: (v: unknown) => void) =>
       resolve(finalResult),
   });
   mockOrder.mockReturnValue({
     eq: mockEq,
     limit: mockLimit,
+    range: mockRange,
+    then: (resolve: (v: unknown) => void) =>
+      resolve(finalResult),
+  });
+  mockRange.mockReturnValue({
+    eq: mockEq,
     then: (resolve: (v: unknown) => void) =>
       resolve(finalResult),
   });

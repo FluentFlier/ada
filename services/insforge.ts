@@ -230,28 +230,32 @@ export async function saveItem(
   return data[0] as Item;
 }
 
+export const DEFAULT_PAGE_LIMIT = 50;
+
 export async function getItems(
   userId: string,
   options: {
     status?: ItemStatus;
     category?: Category;
     limit?: number;
+    offset?: number;
   } = {},
 ): Promise<Item[]> {
+  const limit = options.limit ?? DEFAULT_PAGE_LIMIT;
+  const offset = options.offset ?? 0;
+
   let query = insforge.database
     .from('items')
     .select('*')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
 
   if (options.status) {
     query = query.eq('status', options.status);
   }
   if (options.category) {
     query = query.eq('category', options.category);
-  }
-  if (options.limit) {
-    query = query.limit(options.limit);
   }
 
   const { data, error } = await query;
@@ -353,13 +357,17 @@ export async function getActionsForItem(
 
 export async function getActionsForUser(
   userId: string,
-  options: { status?: ActionStatus } = {},
+  options: { status?: ActionStatus; limit?: number; offset?: number } = {},
 ): Promise<(Action & { item?: Item })[]> {
+  const limit = options.limit ?? DEFAULT_PAGE_LIMIT;
+  const offset = options.offset ?? 0;
+
   let query = insforge.database
     .from('actions')
     .select('*, item:items(*)')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
 
   if (options.status) {
     query = query.eq('status', options.status);
@@ -413,9 +421,12 @@ export async function uploadImage(
 
 // ─── Edge Functions ──────────────────────────────────────────────────
 
-export async function triggerClassify(itemId: string): Promise<void> {
+export async function triggerClassify(
+  itemId: string,
+  itemData?: { type: string; raw_content: string; user_id: string },
+): Promise<void> {
   const { error } = await insforge.functions.invoke('classify', {
-    body: { item_id: itemId },
+    body: { item_id: itemId, ...itemData },
   });
 
   if (error) {
