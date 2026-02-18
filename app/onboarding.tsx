@@ -13,6 +13,7 @@ import {
   Platform,
   StyleSheet,
 } from 'react-native';
+import { COLORS } from '@/constants/theme';
 import { useAuthStore } from '@/stores/auth';
 
 export default function OnboardingScreen() {
@@ -103,7 +104,7 @@ function AuthStep({
         <TextInput
           style={styles.input}
           placeholder="Email"
-          placeholderTextColor="#6B7280"
+          placeholderTextColor={COLORS.textMuted}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -113,7 +114,7 @@ function AuthStep({
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor="#6B7280"
+          placeholderTextColor={COLORS.textMuted}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -128,7 +129,7 @@ function AuthStep({
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#FFF" />
+            <ActivityIndicator color={COLORS.textPrimary} />
           ) : (
             <Text style={styles.buttonText}>
               {isSignUp ? 'Create Account' : 'Sign In'}
@@ -191,7 +192,7 @@ function VerifyStep({
         <TextInput
           style={[styles.input, styles.codeInput]}
           placeholder="Enter 6-digit code"
-          placeholderTextColor="#6B7280"
+          placeholderTextColor={COLORS.textMuted}
           value={code}
           onChangeText={setCode}
           keyboardType="number-pad"
@@ -207,7 +208,7 @@ function VerifyStep({
           disabled={loading || code.trim().length < 6}
         >
           {loading ? (
-            <ActivityIndicator color="#FFF" />
+            <ActivityIndicator color={COLORS.textPrimary} />
           ) : (
             <Text style={styles.buttonText}>Verify</Text>
           )}
@@ -222,7 +223,7 @@ function VerifyStep({
         </Pressable>
 
         <Pressable onPress={onBack} style={styles.toggle}>
-          <Text style={[styles.toggleText, { color: '#6B7280' }]}>
+          <Text style={[styles.toggleText, { color: COLORS.textMuted }]}>
             Back to sign in
           </Text>
         </Pressable>
@@ -236,7 +237,7 @@ function VerifyStep({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F0F14',
+    backgroundColor: COLORS.background,
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
@@ -247,12 +248,12 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 48,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: COLORS.textPrimary,
     letterSpacing: -1,
   },
   tagline: {
     fontSize: 16,
-    color: '#9CA3AF',
+    color: COLORS.textSecondary,
     marginTop: 8,
     textAlign: 'center',
   },
@@ -260,13 +261,13 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   input: {
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
-    color: '#FFFFFF',
+    color: COLORS.textPrimary,
     borderWidth: 1,
-    borderColor: '#2A2A3A',
+    borderColor: COLORS.surfaceElevated,
   },
   codeInput: {
     textAlign: 'center',
@@ -275,12 +276,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   error: {
-    color: '#EF4444',
+    color: COLORS.danger,
     fontSize: 14,
     textAlign: 'center',
   },
   button: {
-    backgroundColor: '#6366F1',
+    backgroundColor: COLORS.primary,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -290,7 +291,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: '#FFFFFF',
+    color: COLORS.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -299,7 +300,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   toggleText: {
-    color: '#6366F1',
+    color: COLORS.primary,
     fontSize: 14,
   },
 });

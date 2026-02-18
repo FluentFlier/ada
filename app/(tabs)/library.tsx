@@ -9,6 +9,7 @@ import {
   RefreshControl, StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { COLORS } from '@/constants/theme';
 import { useAuthStore } from '@/stores/auth';
 import { useItemsStore } from '@/stores/items';
 import { CATEGORY_LIST, getCategoryDef } from '@/constants/categories';
@@ -148,7 +149,7 @@ export default function LibraryScreen() {
           <RefreshControl
             refreshing={loading}
             onRefresh={onRefresh}
-            tintColor="#6366F1"
+            tintColor={COLORS.primary}
           />
         }
         ListEmptyComponent={
@@ -162,32 +163,32 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F0F14' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   filters: { padding: 16, gap: 8 },
   pill: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
   },
-  pillActive: { backgroundColor: '#6366F1' },
-  pillStarred: { backgroundColor: '#F59E0B' },
-  pillText: { fontSize: 13, color: '#9CA3AF', fontWeight: '500' },
-  pillTextActive: { color: '#FFF' },
-  pillTextStarred: { color: '#FFF' },
+  pillActive: { backgroundColor: COLORS.primary },
+  pillStarred: { backgroundColor: COLORS.warning },
+  pillText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '500' },
+  pillTextActive: { color: COLORS.textPrimary },
+  pillTextStarred: { color: COLORS.textPrimary },
   list: { padding: 16, gap: 8 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     borderRadius: 10,
     padding: 14,
     gap: 12,
   },
   dot: { width: 10, height: 10, borderRadius: 5 },
   cardContent: { flex: 1, gap: 4 },
-  cardTitle: { fontSize: 15, fontWeight: '500', color: '#FFF' },
-  cardMeta: { fontSize: 12, color: '#6B7280' },
+  cardTitle: { fontSize: 15, fontWeight: '500', color: COLORS.textPrimary },
+  cardMeta: { fontSize: 12, color: COLORS.textMuted },
   empty: { alignItems: 'center', paddingTop: 60 },
-  emptyText: { fontSize: 14, color: '#6B7280' },
+  emptyText: { fontSize: 14, color: COLORS.textMuted },
 });

@@ -9,6 +9,7 @@
 import { useEffect } from 'react';
 import { Stack, useSegments, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { COLORS } from '@/constants/theme';
 import { useAuthStore } from '@/stores/auth';
 import { useItemsStore } from '@/stores/items';
 import { useActionsStore } from '@/stores/actions';
@@ -64,7 +65,7 @@ export default function RootLayout() {
   if (!initialized) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#6366F1" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );
   }
@@ -75,7 +76,7 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#0F0F14' },
+          contentStyle: { backgroundColor: COLORS.background },
         }}
       >
         <Stack.Screen name="(tabs)" />
@@ -97,6 +98,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0F0F14',
+    backgroundColor: COLORS.background,
   },
 });

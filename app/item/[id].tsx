@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { COLORS } from '@/constants/theme';
 import { useItemsStore } from '@/stores/items';
 import { useActionsStore, type ActionWithItem } from '@/stores/actions';
 import { ActionError } from '@/services/actions';
@@ -132,7 +133,7 @@ export default function ItemDetailScreen() {
             <Ionicons
               name={item.is_starred ? 'star' : 'star-outline'}
               size={22}
-              color={item.is_starred ? '#F59E0B' : '#6B7280'}
+              color={item.is_starred ? COLORS.warning : COLORS.textMuted}
             />
           </Pressable>
           <View style={styles.statusPill}>
@@ -258,7 +259,7 @@ export default function ItemDetailScreen() {
                       {executing === action.id ? (
                         <ActivityIndicator
                           size="small"
-                          color="#FFF"
+                          color={COLORS.textPrimary}
                         />
                       ) : (
                         <Text style={styles.approveBtnText}>
@@ -295,7 +296,7 @@ export default function ItemDetailScreen() {
         <TextInput
           style={styles.noteInput}
           placeholder="Add a personal note..."
-          placeholderTextColor="#6B7280"
+          placeholderTextColor={COLORS.textMuted}
           value={noteText ?? item.user_note ?? ''}
           onChangeText={setNoteText}
           onBlur={() => {
@@ -329,7 +330,7 @@ export default function ItemDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F0F14', padding: 16 },
+  container: { flex: 1, backgroundColor: COLORS.background, padding: 16 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -342,17 +343,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  back: { color: '#6366F1', fontSize: 16 },
+  back: { color: COLORS.primary, fontSize: 16 },
   backBtn: { marginTop: 20 },
   statusPill: {
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
   statusText: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: COLORS.textSecondary,
     textTransform: 'uppercase',
     fontWeight: '600',
   },
@@ -368,82 +369,82 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   badgeText: { fontSize: 12, fontWeight: '600' },
-  confidence: { fontSize: 12, color: '#6B7280' },
+  confidence: { fontSize: 12, color: COLORS.textMuted },
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#FFF',
+    color: COLORS.textPrimary,
     marginBottom: 8,
   },
   description: {
     fontSize: 15,
-    color: '#9CA3AF',
+    color: COLORS.textSecondary,
     lineHeight: 22,
     marginBottom: 8,
   },
-  date: { fontSize: 13, color: '#6B7280', marginBottom: 24 },
+  date: { fontSize: 13, color: COLORS.textMuted, marginBottom: 24 },
   section: { marginBottom: 24, gap: 8 },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7280',
+    color: COLORS.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   rawContent: {
     fontSize: 14,
-    color: '#D1D5DB',
+    color: COLORS.textLight,
     lineHeight: 20,
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     padding: 12,
     borderRadius: 8,
   },
-  rawContentLink: { color: '#818CF8' },
+  rawContentLink: { color: COLORS.primaryLight },
   dataChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     padding: 10,
     borderRadius: 8,
   },
   dataIcon: { fontSize: 16 },
-  dataText: { fontSize: 14, color: '#D1D5DB', flex: 1 },
+  dataText: { fontSize: 14, color: COLORS.textLight, flex: 1 },
   noteInput: {
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     borderRadius: 8,
     padding: 12,
-    color: '#D1D5DB',
+    color: COLORS.textLight,
     fontSize: 14,
     lineHeight: 20,
     minHeight: 60,
   },
   actionCard: {
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     borderRadius: 10,
     padding: 14,
     gap: 8,
   },
   actionInfo: { gap: 4 },
-  actionLabel: { fontSize: 15, color: '#FFF', fontWeight: '600' },
-  actionDesc: { fontSize: 13, color: '#9CA3AF' },
+  actionLabel: { fontSize: 15, color: COLORS.textPrimary, fontWeight: '600' },
+  actionDesc: { fontSize: 13, color: COLORS.textSecondary },
   actionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
   approveBtn: {
-    backgroundColor: '#6366F1',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
     minWidth: 80,
     alignItems: 'center',
   },
-  approveBtnText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
-  dismissBtnText: { color: '#6B7280', fontSize: 13 },
-  completedText: { color: '#10B981', fontSize: 13, fontWeight: '600' },
-  comingSoonText: { color: '#F59E0B', fontSize: 13, fontWeight: '500' },
+  approveBtnText: { color: COLORS.textPrimary, fontSize: 13, fontWeight: '600' },
+  dismissBtnText: { color: COLORS.textMuted, fontSize: 13 },
+  completedText: { color: COLORS.success, fontSize: 13, fontWeight: '600' },
+  comingSoonText: { color: COLORS.warning, fontSize: 13, fontWeight: '500' },
   itemActions: {
     flexDirection: 'row',
     gap: 16,
@@ -451,16 +452,16 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   itemActionBtn: {
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 8,
   },
-  reclassifyText: { color: '#F59E0B', fontSize: 14 },
-  archiveText: { color: '#6B7280', fontSize: 14 },
-  deleteText: { color: '#EF4444', fontSize: 14 },
+  reclassifyText: { color: COLORS.warning, fontSize: 14 },
+  archiveText: { color: COLORS.textMuted, fontSize: 14 },
+  deleteText: { color: COLORS.danger, fontSize: 14 },
   notFound: {
-    color: '#6B7280',
+    color: COLORS.textMuted,
     fontSize: 16,
     textAlign: 'center',
     paddingTop: 80,

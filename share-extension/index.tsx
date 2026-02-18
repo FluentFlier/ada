@@ -14,6 +14,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { type InitialProps, close } from 'expo-share-extension';
+import { COLORS } from '@/constants/theme';
 import { processSharedContent } from '@/services/share-handler';
 import { getCurrentUser } from '@/services/insforge';
 import { getCategoryDef } from '@/constants/categories';
@@ -71,7 +72,7 @@ export default function ShareExtension(props: InitialProps) {
     <RNView style={styles.container}>
       {status === 'loading' && (
         <>
-          <ActivityIndicator size="small" color="#6366F1" />
+          <ActivityIndicator size="small" color={COLORS.primary} />
           <RNText style={styles.text}>Saving to Ada...</RNText>
         </>
       )}
@@ -107,13 +108,13 @@ export default function ShareExtension(props: InitialProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F0F14',
+    backgroundColor: COLORS.background,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,
   },
-  text: { color: '#9CA3AF', fontSize: 15 },
-  check: { fontSize: 32, color: '#10B981' },
-  hint: { color: '#6B7280', fontSize: 13 },
-  errorIcon: { fontSize: 32, color: '#EF4444' },
+  text: { color: COLORS.textSecondary, fontSize: 15 },
+  check: { fontSize: 32, color: COLORS.success },
+  hint: { color: COLORS.textMuted, fontSize: 13 },
+  errorIcon: { fontSize: 32, color: COLORS.danger },
 });

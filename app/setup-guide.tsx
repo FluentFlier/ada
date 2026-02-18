@@ -11,6 +11,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { COLORS } from '@/constants/theme';
 import { useAuthStore } from '@/stores/auth';
 
 interface Step {
@@ -99,7 +100,7 @@ export default function SetupGuideScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F0F14' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   content: {
     padding: 24,
     paddingTop: 60,
@@ -108,12 +109,12 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#FFF',
+    color: COLORS.textPrimary,
     textAlign: 'center',
   },
   subheading: {
     fontSize: 15,
-    color: '#9CA3AF',
+    color: COLORS.textSecondary,
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -121,7 +122,7 @@ const styles = StyleSheet.create({
   step: {
     flexDirection: 'row',
     gap: 14,
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 16,
   },
@@ -129,12 +130,12 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#6366F1',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   stepNumberText: {
-    color: '#FFF',
+    color: COLORS.textPrimary,
     fontWeight: '700',
     fontSize: 14,
   },
@@ -142,15 +143,15 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFF',
+    color: COLORS.textPrimary,
   },
   stepDesc: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: COLORS.textSecondary,
     lineHeight: 20,
   },
   button: {
-    backgroundColor: '#6366F1',
+    backgroundColor: COLORS.primary,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -158,10 +159,10 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: {
-    color: '#FFF',
+    color: COLORS.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   skip: { alignItems: 'center', marginTop: 8 },
-  skipText: { color: '#6B7280', fontSize: 14 },
+  skipText: { color: COLORS.textMuted, fontSize: 14 },
 });

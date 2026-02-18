@@ -16,6 +16,8 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { COLORS } from '@/constants/theme';
+
 const { width } = Dimensions.get('window');
 
 interface WelcomePage {
@@ -70,7 +72,7 @@ export default function WelcomeScreen() {
 
   const renderPage = ({ item }: { item: WelcomePage }) => (
     <View style={styles.page}>
-      <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={64} color="#6366F1" style={styles.icon} />
+      <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={64} color={COLORS.primary} style={styles.icon} />
       <Text style={styles.title}>{item.title}</Text>
       <Text style={styles.subtitle}>{item.subtitle}</Text>
     </View>
@@ -125,7 +127,7 @@ export default function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F0F14' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   page: {
     width,
     justifyContent: 'center',
@@ -137,13 +139,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#FFF',
+    color: COLORS.textPrimary,
     textAlign: 'center',
     marginBottom: 12,
   },
   subtitle: {
     fontSize: 16,
-    color: '#9CA3AF',
+    color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -160,20 +162,20 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#2A2A3A',
+    backgroundColor: COLORS.surfaceElevated,
   },
-  dotActive: { backgroundColor: '#6366F1', width: 24 },
+  dotActive: { backgroundColor: COLORS.primary, width: 24 },
   button: {
-    backgroundColor: '#6366F1',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 48,
     paddingVertical: 16,
     borderRadius: 12,
   },
   buttonText: {
-    color: '#FFF',
+    color: COLORS.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   skip: { marginTop: 4 },
-  skipText: { color: '#6B7280', fontSize: 14 },
+  skipText: { color: COLORS.textMuted, fontSize: 14 },
 });

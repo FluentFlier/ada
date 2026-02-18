@@ -14,6 +14,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { COLORS } from '@/constants/theme';
 import { useAuthStore } from '@/stores/auth';
 import { useActionsStore, type ActionWithItem } from '@/stores/actions';
 import { getCategoryDef } from '@/constants/categories';
@@ -115,7 +116,7 @@ export default function TasksScreen() {
               disabled={executingId === action.id}
             >
               {executingId === action.id ? (
-                <ActivityIndicator size="small" color="#FFF" />
+                <ActivityIndicator size="small" color={COLORS.textPrimary} />
               ) : (
                 <Text style={styles.executeBtnText}>Execute</Text>
               )}
@@ -153,7 +154,7 @@ export default function TasksScreen() {
           <RefreshControl
             refreshing={loading}
             onRefresh={onRefresh}
-            tintColor="#6366F1"
+            tintColor={COLORS.primary}
           />
         }
         ListEmptyComponent={
@@ -170,19 +171,19 @@ export default function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F0F14' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   list: { padding: 16, gap: 8 },
   sectionHeader: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7280',
+    color: COLORS.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: 16,
     marginBottom: 8,
   },
   card: {
-    backgroundColor: '#1A1A24',
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 14,
     gap: 6,
@@ -196,7 +197,7 @@ const styles = StyleSheet.create({
   actionType: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#FFF',
+    color: COLORS.textPrimary,
   },
   badge: {
     paddingHorizontal: 8,
@@ -206,9 +207,9 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '600' },
   itemTitle: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: COLORS.textSecondary,
   },
-  meta: { fontSize: 12, color: '#6B7280' },
+  meta: { fontSize: 12, color: COLORS.textMuted },
   actionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -216,17 +217,17 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   executeBtn: {
-    backgroundColor: '#6366F1',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
   },
-  executeBtnText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
+  executeBtnText: { color: COLORS.textPrimary, fontSize: 13, fontWeight: '600' },
   executeBtnDisabled: { opacity: 0.6 },
-  dismissBtnText: { color: '#6B7280', fontSize: 13 },
-  comingSoonText: { color: '#F59E0B', fontSize: 13, fontWeight: '500', marginTop: 4 },
+  dismissBtnText: { color: COLORS.textMuted, fontSize: 13 },
+  comingSoonText: { color: COLORS.warning, fontSize: 13, fontWeight: '500', marginTop: 4 },
   completedText: {
-    color: '#10B981',
+    color: COLORS.success,
     fontSize: 13,
     fontWeight: '600',
     marginTop: 4,
@@ -239,11 +240,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.textPrimary,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.textMuted,
     textAlign: 'center',
   },
 });
