@@ -6,12 +6,8 @@
  */
 
 import { createClient } from 'npm:@insforge/sdk';
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
+import { fetchJinaContent } from '../_shared/jina.ts';
+import { jsonResponse, CORS_HEADERS } from '../_shared/response.ts';
 
 export default async function handler(
   req: Request,
@@ -136,30 +132,6 @@ export default async function handler(
   }
 }
 
-// ─── Jina Reader ─────────────────────────────────────────────────────
-
-async function fetchJinaContent(url: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8_000);
-
-  try {
-    const response = await fetch(`https://r.jina.ai/${url}`, {
-      headers: { Accept: 'text/plain' },
-      signal: controller.signal,
-    });
-
-    if (!response.ok) return url;
-
-    const text = await response.text();
-    return text.slice(0, 15_000);
-  } catch (fetchErr) {
-    console.warn('Jina Reader failed, using raw URL:', fetchErr);
-    return url;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 // ─── Constants ───────────────────────────────────────────────────────
 
 const SUMMARIZE_PROMPT = `Summarize the following content concisely.
@@ -170,18 +142,3 @@ Provide:
 3. Any action items mentioned
 
 Keep the total response under 300 words.`;
-
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function jsonResponse(
-  body: Record<string, unknown>,
-  status = 200,
-): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      ...CORS_HEADERS,
-      'Content-Type': 'application/json',
-    },
-  });
-}

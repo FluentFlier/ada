@@ -12,12 +12,8 @@
  */
 
 import { createClient } from 'npm:@insforge/sdk';
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
+import { fetchJinaContent } from '../_shared/jina.ts';
+import { jsonResponse, CORS_HEADERS } from '../_shared/response.ts';
 
 export default async function handler(
   req: Request,
@@ -91,8 +87,15 @@ export default async function handler(
       imageBase64,
     );
 
-    // 4. Update item with classification
-    const { error: updateError } = await client.database
+    // 4-6. Update item, create actions, notify — all in parallel
+    const userId = String(item.user_id);
+    const classifiedItem = {
+      ...item,
+      ...classification,
+      status: 'classified',
+    };
+
+    const updatePromise = client.database
       .from('items')
       .update({
         category: classification.category,
@@ -106,44 +109,49 @@ export default async function handler(
       })
       .eq('id', item_id);
 
-    if (updateError) {
-      console.warn('Item update failed:', updateError);
+    const actionsPromise =
+      classification.suggested_actions.length > 0
+        ? client.database.from('actions').insert(
+            classification.suggested_actions.map(
+              (action: {
+                type: string;
+                label: string;
+                data: Record<string, unknown>;
+              }) => ({
+                user_id: userId,
+                item_id: item_id,
+                type: action.type,
+                status: 'suggested',
+                action_data: { label: action.label, ...action.data },
+              }),
+            ),
+          )
+        : Promise.resolve({ error: null });
+
+    const realtimePromise = client.realtime
+      .connect()
+      .then(() => client.realtime.subscribe(`items:${userId}`))
+      .then(() =>
+        client.realtime.publish(`items:${userId}`, 'item_updated', {
+          item: classifiedItem,
+        }),
+      )
+      .catch((err: unknown) =>
+        console.warn('Realtime notify failed (non-fatal):', err),
+      );
+
+    const [updateResult, actionsResult] = await Promise.all([
+      updatePromise,
+      actionsPromise,
+      realtimePromise,
+    ]);
+
+    if (updateResult.error) {
+      console.warn('Item update failed:', updateResult.error);
       return jsonResponse({ error: 'Failed to update item' }, 500);
     }
-
-    // 5. Create action rows (batch insert)
-    const userId = String(item.user_id);
-    if (classification.suggested_actions.length > 0) {
-      const actionRows = classification.suggested_actions.map(
-        (action: { type: string; label: string; data: Record<string, unknown> }) => ({
-          user_id: userId,
-          item_id: item_id,
-          type: action.type,
-          status: 'suggested',
-          action_data: { label: action.label, ...action.data },
-        }),
-      );
-
-      const { error: actionsError } = await client.database
-        .from('actions')
-        .insert(actionRows);
-
-      if (actionsError) {
-        console.error('Failed to create actions:', actionsError);
-      }
-    }
-
-    // 6. Notify via realtime
-    try {
-      await client.realtime.connect();
-      await client.realtime.subscribe(`items:${userId}`);
-      await client.realtime.publish(
-        `items:${userId}`,
-        'item_updated',
-        { item: { ...item, ...classification, status: 'classified' } },
-      );
-    } catch (realtimeErr) {
-      console.warn('Realtime notify failed (non-fatal):', realtimeErr);
+    if (actionsResult.error) {
+      console.error('Failed to create actions:', actionsResult.error);
     }
 
     return jsonResponse({ success: true, item_id });
@@ -177,33 +185,6 @@ async function downloadImageAsBase64(
   } catch (err) {
     console.warn('Image base64 conversion failed:', err);
     return null;
-  }
-}
-
-// ─── Jina Reader ─────────────────────────────────────────────────────
-
-async function fetchJinaContent(url: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8_000);
-
-  try {
-    const response = await fetch(`https://r.jina.ai/${url}`, {
-      headers: { Accept: 'text/plain' },
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      console.warn(`Jina Reader returned ${response.status} for ${url}`);
-      return url;
-    }
-
-    const text = await response.text();
-    return text.slice(0, 15_000);
-  } catch (err) {
-    console.warn('Jina Reader failed, using raw URL:', err);
-    return url;
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -327,19 +308,4 @@ async function classifyWithAI(
       suggested_actions: [],
     };
   }
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function jsonResponse(
-  body: Record<string, unknown>,
-  status = 200,
-): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      ...CORS_HEADERS,
-      'Content-Type': 'application/json',
-    },
-  });
 }
