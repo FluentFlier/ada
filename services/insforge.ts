@@ -448,12 +448,17 @@ export async function triggerSummarize(
 
 // ─── Realtime ────────────────────────────────────────────────────────
 
+const MAX_RECONNECT_DELAY_MS = 30_000;
+const INITIAL_RECONNECT_DELAY_MS = 1_000;
+
 export function subscribeToItems(
   userId: string,
   onUpdate: (item: Item) => void,
 ) {
   const channel = `items:${userId}`;
   let cancelled = false;
+  let retryCount = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   const handleUpdate = (payload: unknown) => {
     const msg = payload as { item?: Item };
@@ -462,18 +467,38 @@ export function subscribeToItems(
     }
   };
 
-  insforge.realtime.connect().then(() => {
+  function connect() {
     if (cancelled) return;
-    insforge.realtime.subscribe(channel);
-    insforge.realtime.on('item_updated', handleUpdate);
-    insforge.realtime.on('item_created', handleUpdate);
-  }).catch((err: unknown) => {
-    console.error('Realtime connect failed:', err);
-  });
+
+    insforge.realtime.connect().then(() => {
+      if (cancelled) return;
+      retryCount = 0;
+      insforge.realtime.subscribe(channel);
+      insforge.realtime.on('item_updated', handleUpdate);
+      insforge.realtime.on('item_created', handleUpdate);
+    }).catch((err: unknown) => {
+      if (cancelled) return;
+      console.warn('Realtime connect failed, will retry:', err);
+      scheduleReconnect();
+    });
+  }
+
+  function scheduleReconnect() {
+    if (cancelled) return;
+    const delay = Math.min(
+      INITIAL_RECONNECT_DELAY_MS * 2 ** retryCount,
+      MAX_RECONNECT_DELAY_MS,
+    );
+    retryCount++;
+    retryTimer = setTimeout(connect, delay);
+  }
+
+  connect();
 
   return {
     unsubscribe: () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       insforge.realtime.off('item_updated', handleUpdate);
       insforge.realtime.off('item_created', handleUpdate);
       insforge.realtime.unsubscribe(channel);
