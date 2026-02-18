@@ -12,6 +12,7 @@ import {
   RefreshControl,
   TextInput,
   Alert,
+  ActivityIndicator,
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -29,9 +30,10 @@ import type { ContentType, Item } from '@/types/item';
 export default function InboxScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const { items, loading, fetchItems } = useItemsStore();
+  const { items, loading, fetchItems, prependItem } = useItemsStore();
   const [showAddInput, setShowAddInput] = useState(false);
   const [addText, setAddText] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const { toggleStar } = useItemsStore();
 
@@ -54,21 +56,24 @@ export default function InboxScreen() {
   }, [user, fetchItems]);
 
   const handleAdd = async () => {
-    if (!addText.trim() || !user) return;
+    if (!addText.trim() || !user || saving) return;
 
     const trimmed = addText.trim();
     const type: ContentType = isLikelyUrl(trimmed) ? 'link' : 'text';
 
+    setSaving(true);
     try {
       const item = await saveItem(user.id, { type, content: trimmed });
+      prependItem(item);
       triggerClassify(item.id).catch(() => {});
       setAddText('');
       setShowAddInput(false);
-      fetchItems(user.id);
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : 'Unknown error';
       Alert.alert('Save Failed', msg);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -180,9 +185,14 @@ export default function InboxScreen() {
             </Pressable>
             <Pressable
               onPress={handleAdd}
-              style={styles.addButton}
+              style={[styles.addButton, saving && styles.addButtonDisabled]}
+              disabled={saving}
             >
-              <Text style={styles.addButtonText}>Save</Text>
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={styles.addButtonText}>Save</Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -352,5 +362,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
   },
+  addButtonDisabled: { opacity: 0.6 },
   addButtonText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
 });

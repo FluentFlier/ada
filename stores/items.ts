@@ -23,6 +23,7 @@ interface ItemsState {
   error: string | null;
 
   fetchItems: (userId: string) => Promise<void>;
+  prependItem: (item: Item) => void;
   refreshItem: (itemId: string) => Promise<void>;
   archiveItem: (itemId: string) => Promise<void>;
   deleteItem: (itemId: string) => Promise<void>;
@@ -55,6 +56,10 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
           : 'Failed to load items.';
       set({ error: message, loading: false });
     }
+  },
+
+  prependItem: (item: Item) => {
+    set((state) => ({ items: [item, ...state.items] }));
   },
 
   refreshItem: async (itemId: string) => {
@@ -108,6 +113,17 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
   },
 
   reclassify: async (itemId: string) => {
+    const prev = get().items;
+
+    // Optimistic: mark as pending
+    set((state) => ({
+      items: state.items.map((i) =>
+        i.id === itemId
+          ? { ...i, status: 'pending' as ItemStatus, category: null, confidence: null }
+          : i,
+      ),
+    }));
+
     try {
       await apiUpdateItem(itemId, {
         status: 'pending',
@@ -116,7 +132,8 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
       });
       await triggerClassify(itemId);
     } catch (err) {
-      console.error('Reclassify failed:', err);
+      set({ items: prev });
+      throw err;
     }
   },
 

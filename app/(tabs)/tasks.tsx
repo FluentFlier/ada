@@ -2,7 +2,7 @@
  * Tasks — pending and completed actions across all items.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Pressable,
   RefreshControl,
   Alert,
+  ActivityIndicator,
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -32,6 +33,7 @@ export default function TasksScreen() {
     getCompleted,
   } = useActionsStore();
 
+  const [executingId, setExecutingId] = useState<string | null>(null);
   const pending = getPending();
   const completed = getCompleted();
 
@@ -49,12 +51,15 @@ export default function TasksScreen() {
   }, [user, fetchActions]);
 
   const handleExecute = async (action: ActionWithItem) => {
+    setExecutingId(action.id);
     try {
       await executeAndUpdate(action);
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : 'Failed to execute action.';
       Alert.alert('Action Failed', msg);
+    } finally {
+      setExecutingId(null);
     }
   };
 
@@ -98,13 +103,22 @@ export default function TasksScreen() {
           {timeAgo(action.created_at)}
         </Text>
 
-        {action.status === 'suggested' && (
+        {action.status === 'suggested' &&
+          !PLACEHOLDER_ACTIONS.has(action.type) && (
           <View style={styles.actionButtons}>
             <Pressable
-              style={styles.executeBtn}
+              style={[
+                styles.executeBtn,
+                executingId === action.id && styles.executeBtnDisabled,
+              ]}
               onPress={() => handleExecute(action)}
+              disabled={executingId === action.id}
             >
-              <Text style={styles.executeBtnText}>Execute</Text>
+              {executingId === action.id ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={styles.executeBtnText}>Execute</Text>
+              )}
             </Pressable>
             <Pressable
               onPress={() => dismissAction(action.id)}
@@ -112,6 +126,10 @@ export default function TasksScreen() {
               <Text style={styles.dismissBtnText}>Dismiss</Text>
             </Pressable>
           </View>
+        )}
+        {action.status === 'suggested' &&
+          PLACEHOLDER_ACTIONS.has(action.type) && (
+          <Text style={styles.comingSoonText}>Coming Soon</Text>
         )}
 
         {action.status === 'completed' && (
@@ -204,7 +222,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   executeBtnText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
+  executeBtnDisabled: { opacity: 0.6 },
   dismissBtnText: { color: '#6B7280', fontSize: 13 },
+  comingSoonText: { color: '#F59E0B', fontSize: 13, fontWeight: '500', marginTop: 4 },
   completedText: {
     color: '#10B981',
     fontSize: 13,
