@@ -4,47 +4,199 @@
  * All database, auth, storage, and function calls go through this module.
  * No other file should import @insforge/sdk directly.
  *
- * SDK patterns verified via InsForge MCP fetch-docs (2026-02-18).
+ * Auth uses direct REST calls (the TS SDK's auth relies on browser
+ * cookies/localStorage which don't exist in React Native). After auth,
+ * the access token is set on the SDK client via getHttpClient().setAuthToken()
+ * so database/storage/functions/realtime calls work normally.
+ *
+ * Token is persisted in expo-secure-store across app restarts.
  */
 
 import { createClient } from '@insforge/sdk';
+import * as SecureStore from 'expo-secure-store';
 import { CONFIG } from '@/constants/config';
 import type { Item, RawCapture, ItemStatus, Category } from '@/types/item';
 import type { Action, ActionStatus } from '@/types/action';
 
 // ─── Client Initialization ───────────────────────────────────────────
 
+const BASE_URL = CONFIG.insforge.url;
+const ANON_KEY = CONFIG.insforge.anonKey;
+const TOKEN_KEY = 'insforge_access_token';
+
 export const insforge = createClient({
-  baseUrl: CONFIG.insforge.url,
-  anonKey: CONFIG.insforge.anonKey,
+  baseUrl: BASE_URL,
+  anonKey: ANON_KEY,
 });
+
+/** Set token on SDK so database/storage/functions include Authorization. */
+function setToken(token: string | null) {
+  insforge.getHttpClient().setAuthToken(token);
+}
+
+/** Persist token to SecureStore and set on SDK. */
+async function saveToken(token: string) {
+  setToken(token);
+  await SecureStore.setItemAsync(TOKEN_KEY, token);
+}
+
+/** Clear token from SDK and SecureStore. */
+async function clearToken() {
+  setToken(null);
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+}
+
+/** Direct POST to InsForge auth API (bypasses SDK browser dependencies). */
+async function authPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${ANON_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    const msg = json?.message ?? json?.error ?? `HTTP ${res.status}`;
+    throw new AuthError(msg, json);
+  }
+
+  return json as T;
+}
+
+/** Direct GET to InsForge auth API. */
+async function authGet<T>(path: string, token: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new AuthError(json?.message ?? `HTTP ${res.status}`, json);
+  }
+
+  return json as T;
+}
 
 // ─── Auth ────────────────────────────────────────────────────────────
 
+interface AuthUser {
+  id: string;
+  email: string;
+  emailVerified?: boolean;
+  profile?: { name?: string; avatar_url?: string } | null;
+}
+
+interface SignUpResponse {
+  accessToken: string | null;
+  user?: AuthUser;
+  requireEmailVerification?: boolean;
+}
+
+interface SignInResponse {
+  accessToken: string;
+  user: AuthUser;
+}
+
+interface VerifyResponse {
+  accessToken: string;
+  user: AuthUser;
+}
+
+interface ResendResponse {
+  success: boolean;
+  message: string;
+}
+
 export async function signUp(email: string, password: string) {
-  const { data, error } = await insforge.auth.signUp({ email, password });
-  if (error) throw new AuthError('Sign up failed', error);
+  const data = await authPost<SignUpResponse>('/api/auth/users', {
+    email,
+    password,
+  });
+
+  if (data.accessToken) {
+    await saveToken(data.accessToken);
+  }
+
   return data;
 }
 
 export async function signIn(email: string, password: string) {
-  const { data, error } = await insforge.auth.signInWithPassword({
+  const data = await authPost<SignInResponse>('/api/auth/sessions', {
     email,
     password,
   });
-  if (error) throw new AuthError('Sign in failed', error);
+
+  await saveToken(data.accessToken);
   return data;
 }
 
 export async function signOut() {
-  const { error } = await insforge.auth.signOut();
-  if (error) throw new AuthError('Sign out failed', error);
+  await clearToken();
 }
 
-export async function getCurrentUser() {
-  const { data, error } = await insforge.auth.getCurrentSession();
-  if (error) throw new AuthError('Get session failed', error);
-  return data?.session?.user ?? null;
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  if (!token) {
+    // DEV: auto-login with test user if no token stored
+    if (__DEV__) return devAutoLogin();
+    return null;
+  }
+
+  try {
+    const data = await authGet<AuthUser>(
+      '/api/auth/profiles/current',
+      token,
+    );
+    // Restore token on SDK for this session
+    setToken(token);
+    return data;
+  } catch {
+    // Token expired — try dev auto-login in dev, null in production
+    if (__DEV__) return devAutoLogin();
+    await clearToken();
+    return null;
+  }
+}
+
+/** DEV ONLY: auto-login with test user to skip auth during development. */
+async function devAutoLogin(): Promise<AuthUser | null> {
+  try {
+    const data = await authPost<SignInResponse>('/api/auth/sessions', {
+      email: 'ada.test@example.com',
+      password: 'AdaTest12345',
+    });
+    await saveToken(data.accessToken);
+    return data.user;
+  } catch {
+    return null;
+  }
+}
+
+export async function verifyEmail(email: string, otp: string) {
+  const data = await authPost<VerifyResponse>('/api/auth/email/verify', {
+    email,
+    otp,
+  });
+
+  if (data.accessToken) {
+    await saveToken(data.accessToken);
+  }
+
+  return data;
+}
+
+export async function resendVerificationEmail(email: string) {
+  return authPost<ResendResponse>('/api/auth/email/send-verification', {
+    email,
+  });
 }
 
 // ─── Items ───────────────────────────────────────────────────────────
@@ -119,7 +271,7 @@ export async function updateItem(
 ): Promise<Item> {
   const { data, error } = await insforge.database
     .from('items')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update(updates)
     .eq('id', itemId)
     .select();
 
@@ -143,6 +295,40 @@ export async function deleteItem(itemId: string): Promise<void> {
   if (error) throw new DatabaseError('Failed to delete item', error);
 }
 
+export async function toggleStar(
+  itemId: string,
+  starred: boolean,
+): Promise<Item> {
+  const { data, error } = await insforge.database
+    .from('items')
+    .update({ is_starred: starred })
+    .eq('id', itemId)
+    .select();
+
+  if (error) throw new DatabaseError('Failed to toggle star', error);
+  if (!data || data.length === 0) {
+    throw new DatabaseError('Toggle star returned no data');
+  }
+  return data[0] as Item;
+}
+
+export async function updateUserNote(
+  itemId: string,
+  note: string | null,
+): Promise<Item> {
+  const { data, error } = await insforge.database
+    .from('items')
+    .update({ user_note: note })
+    .eq('id', itemId)
+    .select();
+
+  if (error) throw new DatabaseError('Failed to update note', error);
+  if (!data || data.length === 0) {
+    throw new DatabaseError('Update note returned no data');
+  }
+  return data[0] as Item;
+}
+
 // ─── Actions ─────────────────────────────────────────────────────────
 
 export async function getActionsForItem(
@@ -156,6 +342,25 @@ export async function getActionsForItem(
 
   if (error) throw new DatabaseError('Failed to fetch actions', error);
   return (data ?? []) as Action[];
+}
+
+export async function getActionsForUser(
+  userId: string,
+  options: { status?: ActionStatus } = {},
+): Promise<(Action & { item?: Item })[]> {
+  let query = insforge.database
+    .from('actions')
+    .select('*, item:items(*)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (options.status) {
+    query = query.eq('status', options.status);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new DatabaseError('Failed to fetch user actions', error);
+  return (data ?? []) as (Action & { item?: Item })[];
 }
 
 export async function updateActionStatus(
@@ -231,28 +436,25 @@ export function subscribeToItems(
 ) {
   const channel = `items:${userId}`;
 
+  const handleUpdate = (payload: unknown) => {
+    const msg = payload as { item?: Item };
+    if (msg.item) {
+      onUpdate(msg.item);
+    }
+  };
+
   insforge.realtime.connect().then(() => {
     insforge.realtime.subscribe(channel);
+    insforge.realtime.on('item_updated', handleUpdate);
+    insforge.realtime.on('item_created', handleUpdate);
   }).catch((err: unknown) => {
     console.error('Realtime connect failed:', err);
   });
 
-  insforge.realtime.on('item_updated', (payload: unknown) => {
-    const msg = payload as { item?: Item };
-    if (msg.item) {
-      onUpdate(msg.item);
-    }
-  });
-
-  insforge.realtime.on('item_created', (payload: unknown) => {
-    const msg = payload as { item?: Item };
-    if (msg.item) {
-      onUpdate(msg.item);
-    }
-  });
-
   return {
     unsubscribe: () => {
+      insforge.realtime.off('item_updated', handleUpdate);
+      insforge.realtime.off('item_created', handleUpdate);
       insforge.realtime.unsubscribe(channel);
     },
   };

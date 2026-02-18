@@ -7,7 +7,12 @@
  * Must complete in <2 seconds for share extension UX.
  */
 
-import { saveItem, uploadImage, triggerClassify } from './insforge';
+import {
+  saveItem,
+  uploadImage,
+  updateItem,
+  triggerClassify,
+} from './insforge';
 import { classifyHeuristic } from './classifier';
 import { isLikelyUrl } from '@/utils/url-patterns';
 import { CONFIG } from '@/constants/config';
@@ -53,24 +58,24 @@ export async function processSharedContent(
   // Save to database
   const item = await saveItem(userId, capture);
 
-  // Upload image if present (parallel with classify trigger)
-  const tasks: Promise<unknown>[] = [
-    triggerClassify(item.id),
-  ];
-
+  // If image, upload first so edge function can download from storage
   if (input.imageUri) {
     const fileName = `share-${Date.now()}.jpg`;
-    tasks.push(
-      uploadImage(userId, input.imageUri, fileName).catch((err) => {
-        console.error('Image upload failed (non-fatal):', err);
-      }),
-    );
+    try {
+      const storagePath = await uploadImage(
+        userId,
+        input.imageUri,
+        fileName,
+      );
+      // Update raw_content to storage path so classify can find it
+      await updateItem(item.id, { raw_content: storagePath });
+    } catch (err) {
+      console.error('Image upload failed (non-fatal):', err);
+    }
   }
 
   // Fire and forget — don't wait for classification
-  Promise.allSettled(tasks).catch(() => {
-    // Errors already logged in individual handlers
-  });
+  triggerClassify(item.id).catch(() => {});
 
   return { item, heuristicHint };
 }

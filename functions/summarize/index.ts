@@ -21,6 +21,15 @@ export default async function handler(
   }
 
   try {
+    const authHeader = req.headers.get('Authorization');
+    const userToken = authHeader
+      ? authHeader.replace('Bearer ', '')
+      : null;
+
+    if (!userToken) {
+      return jsonResponse({ error: 'Authentication required' }, 401);
+    }
+
     const { item_id, action_id } = await req.json();
     if (!item_id || !action_id) {
       return jsonResponse(
@@ -28,11 +37,6 @@ export default async function handler(
         400,
       );
     }
-
-    const authHeader = req.headers.get('Authorization');
-    const userToken = authHeader
-      ? authHeader.replace('Bearer ', '')
-      : null;
 
     const client = createClient({
       baseUrl: Deno.env.get('INSFORGE_BASE_URL'),
@@ -82,9 +86,38 @@ export default async function handler(
       })
       .eq('id', action_id);
 
+    // 5. Also update the item description with the summary
+    await client.database
+      .from('items')
+      .update({ description: summary.slice(0, 1000) })
+      .eq('id', item_id);
+
     return jsonResponse({ success: true, summary });
   } catch (err) {
     console.error('Summarize function error:', err);
+
+    // Mark action as failed so user sees the error
+    try {
+      const body = await req.clone().json();
+      if (body?.action_id) {
+        const failClient = createClient({
+          baseUrl: Deno.env.get('INSFORGE_BASE_URL'),
+          edgeFunctionToken: req.headers.get('Authorization')?.replace('Bearer ', '') ?? null,
+        });
+        await failClient.database
+          .from('actions')
+          .update({
+            status: 'failed',
+            result: {
+              error: err instanceof Error ? err.message : 'Unknown error',
+            },
+          })
+          .eq('id', body.action_id);
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
+
     return jsonResponse({ error: 'Summarization failed' }, 500);
   }
 }

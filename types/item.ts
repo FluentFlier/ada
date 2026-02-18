@@ -59,6 +59,8 @@ export interface Item {
   confidence: number | null;
   status: ItemStatus;
   source_app: string | null;
+  is_starred: boolean;
+  user_note: string | null;
   created_at: string;
   updated_at: string;
 }

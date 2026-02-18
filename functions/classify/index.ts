@@ -27,15 +27,19 @@ export default async function handler(
   }
 
   try {
-    const { item_id } = await req.json();
-    if (!item_id) {
-      return jsonResponse({ error: 'item_id required' }, 400);
-    }
-
     const authHeader = req.headers.get('Authorization');
     const userToken = authHeader
       ? authHeader.replace('Bearer ', '')
       : null;
+
+    if (!userToken) {
+      return jsonResponse({ error: 'Authentication required' }, 401);
+    }
+
+    const { item_id } = await req.json();
+    if (!item_id) {
+      return jsonResponse({ error: 'item_id required' }, 400);
+    }
 
     const client = createClient({
       baseUrl: Deno.env.get('INSFORGE_BASE_URL'),
@@ -54,18 +58,27 @@ export default async function handler(
 
     const item = items[0] as Record<string, unknown>;
 
-    // 2. If URL, extract content via Jina Reader
+    // 2. Get content based on type
     const rawContent = String(item.raw_content ?? '');
     const itemType = String(item.type ?? 'text');
-    const content = itemType === 'link'
-      ? await fetchJinaContent(rawContent)
-      : rawContent;
+    let textContent: string;
+    let imageBase64: string | null = null;
+
+    if (itemType === 'link') {
+      textContent = await fetchJinaContent(rawContent);
+    } else if (itemType === 'image' || itemType === 'screenshot') {
+      textContent = rawContent;
+      imageBase64 = await downloadImageAsBase64(client, rawContent);
+    } else {
+      textContent = rawContent;
+    }
 
     // 3. Classify via AI Gateway
     const classification = await classifyWithAI(
       client,
-      content,
+      textContent,
       itemType,
+      imageBase64,
     );
 
     // 4. Update item with classification
@@ -83,16 +96,26 @@ export default async function handler(
       })
       .eq('id', item_id);
 
-    // 5. Create action rows
+    // 5. Create action rows (batch insert)
     const userId = String(item.user_id);
-    for (const action of classification.suggested_actions) {
-      await client.database.from('actions').insert({
-        user_id: userId,
-        item_id: item_id,
-        type: action.type,
-        status: 'suggested',
-        action_data: action,
-      });
+    if (classification.suggested_actions.length > 0) {
+      const actionRows = classification.suggested_actions.map(
+        (action: { type: string; label: string; data: Record<string, unknown> }) => ({
+          user_id: userId,
+          item_id: item_id,
+          type: action.type,
+          status: 'suggested',
+          action_data: { label: action.label, ...action.data },
+        }),
+      );
+
+      const { error: actionsError } = await client.database
+        .from('actions')
+        .insert(actionRows);
+
+      if (actionsError) {
+        console.error('Failed to create actions:', actionsError);
+      }
     }
 
     // 6. Notify via realtime
@@ -112,6 +135,35 @@ export default async function handler(
   } catch (err) {
     console.error('Classify function error:', err);
     return jsonResponse({ error: 'Classification failed' }, 500);
+  }
+}
+
+// ─── Image Download ──────────────────────────────────────────────────
+
+async function downloadImageAsBase64(
+  client: ReturnType<typeof createClient>,
+  storagePath: string,
+): Promise<string | null> {
+  try {
+    const { data, error } = await client.storage
+      .from('item-images')
+      .download(storagePath);
+
+    if (error || !data) {
+      console.warn('Image download failed:', error);
+      return null;
+    }
+
+    const arrayBuf = await (data as Blob).arrayBuffer();
+    const bytes = new Uint8Array(arrayBuf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  } catch (err) {
+    console.warn('Image base64 conversion failed:', err);
+    return null;
   }
 }
 
@@ -194,18 +246,45 @@ Rules:
 - If content has a deadline within 7 days, urgency should be "high" or "critical"
 - Confidence should reflect how certain you are about the category
 - Keep title concise and informative
-- Only include fields where you found actual data`;
+- Only include fields where you found actual data
+- For images/screenshots: extract ALL visible text as "ocrText" in extracted_data
+- Use the visible text to determine category and suggest actions`;
 
 async function classifyWithAI(
   client: ReturnType<typeof createClient>,
   content: string,
   type: string,
+  imageBase64: string | null = null,
 ): Promise<ClassificationResult> {
-  const prompt = `${CLASSIFY_PROMPT}\n\nContent type: ${type}\nContent:\n${content}`;
+  const textPrompt =
+    `${CLASSIFY_PROMPT}\n\nContent type: ${type}\nContent:\n${content}`;
+
+  type MessageContent =
+    | string
+    | Array<
+        | { type: 'text'; text: string }
+        | { type: 'image_url'; image_url: { url: string } }
+      >;
+
+  let messageContent: MessageContent;
+
+  if (imageBase64) {
+    messageContent = [
+      { type: 'text', text: textPrompt },
+      {
+        type: 'image_url',
+        image_url: {
+          url: `data:image/jpeg;base64,${imageBase64}`,
+        },
+      },
+    ];
+  } else {
+    messageContent = textPrompt;
+  }
 
   const completion = await client.ai.chat.completions.create({
     model: 'openai/gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
+    messages: [{ role: 'user', content: messageContent }],
     temperature: 0.1,
   });
 

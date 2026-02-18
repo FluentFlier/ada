@@ -9,6 +9,8 @@ import {
   updateItem as apiUpdateItem,
   archiveItem as apiArchiveItem,
   deleteItem as apiDeleteItem,
+  toggleStar as apiToggleStar,
+  updateUserNote as apiUpdateUserNote,
   subscribeToItems,
   triggerClassify,
   DatabaseError,
@@ -25,11 +27,14 @@ interface ItemsState {
   archiveItem: (itemId: string) => Promise<void>;
   deleteItem: (itemId: string) => Promise<void>;
   reclassify: (itemId: string) => Promise<void>;
+  toggleStar: (itemId: string) => Promise<void>;
+  updateNote: (itemId: string, note: string | null) => Promise<void>;
   startRealtime: (userId: string) => () => void;
 
   // Derived
   getByStatus: (status: ItemStatus) => Item[];
   getByCategory: (category: Category) => Item[];
+  getStarred: () => Item[];
   searchItems: (query: string) => Item[];
 }
 
@@ -68,6 +73,8 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
   },
 
   archiveItem: async (itemId: string) => {
+    const prev = get().items;
+
     // Optimistic update
     set((state) => ({
       items: state.items.map((item) =>
@@ -80,10 +87,8 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
     try {
       await apiArchiveItem(itemId);
     } catch (err) {
-      console.error('Archive failed, refreshing:', err);
-      const { items } = get();
-      const userId = items[0]?.user_id;
-      if (userId) get().fetchItems(userId);
+      console.error('Archive failed, rolling back:', err);
+      set({ items: prev });
     }
   },
 
@@ -112,6 +117,46 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
       await triggerClassify(itemId);
     } catch (err) {
       console.error('Reclassify failed:', err);
+    }
+  },
+
+  toggleStar: async (itemId: string) => {
+    const prev = get().items;
+    const item = prev.find((i) => i.id === itemId);
+    if (!item) return;
+
+    const newStarred = !item.is_starred;
+
+    // Optimistic update
+    set((state) => ({
+      items: state.items.map((i) =>
+        i.id === itemId ? { ...i, is_starred: newStarred } : i,
+      ),
+    }));
+
+    try {
+      await apiToggleStar(itemId, newStarred);
+    } catch (err) {
+      console.error('Toggle star failed, rolling back:', err);
+      set({ items: prev });
+    }
+  },
+
+  updateNote: async (itemId: string, note: string | null) => {
+    const prev = get().items;
+
+    // Optimistic update
+    set((state) => ({
+      items: state.items.map((i) =>
+        i.id === itemId ? { ...i, user_note: note } : i,
+      ),
+    }));
+
+    try {
+      await apiUpdateUserNote(itemId, note);
+    } catch (err) {
+      console.error('Update note failed, rolling back:', err);
+      set({ items: prev });
     }
   },
 
@@ -152,6 +197,12 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
     );
   },
 
+  getStarred: () => {
+    return get().items.filter(
+      (item) => item.is_starred && item.status !== 'archived',
+    );
+  },
+
   searchItems: (query: string) => {
     const lower = query.toLowerCase();
     return get().items.filter((item) => {
@@ -162,6 +213,7 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
         item.raw_content,
         item.category,
         item.source_app,
+        item.user_note,
       ]
         .filter(Boolean)
         .join(' ')

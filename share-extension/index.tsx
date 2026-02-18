@@ -2,46 +2,49 @@
  * iOS Share Extension entry point.
  *
  * Memory limit: 120MB. Must dismiss in <2 seconds.
- * Strategy: heuristic classify → save to InsForge → dismiss.
+ * Strategy: heuristic classify -> save to InsForge -> dismiss.
  * Gemini classification happens async in edge function.
  */
 
 import { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import {
+  View as RNView,
+  Text as RNText,
+  ActivityIndicator,
+  StyleSheet,
+} from 'react-native';
+import { type InitialProps, close } from 'expo-share-extension';
 import { processSharedContent } from '@/services/share-handler';
 import { getCurrentUser } from '@/services/insforge';
 import { getCategoryDef } from '@/constants/categories';
 import { CONFIG } from '@/constants/config';
 
-// expo-share-extension provides these:
-// import { close, useShareIntent } from 'expo-share-extension';
-
-export default function ShareExtension() {
+export default function ShareExtension(props: InitialProps) {
   const [status, setStatus] = useState<'loading' | 'saved' | 'error'>(
     'loading',
   );
   const [categoryHint, setCategoryHint] = useState('');
 
   useEffect(() => {
-    handleShare();
+    handleShare(props);
   }, []);
 
-  async function handleShare() {
+  async function handleShare(intent: InitialProps) {
     try {
-      // TODO: Replace with actual expo-share-extension hooks
-      // const { text, url, images } = useShareIntent();
-      const text = ''; // placeholder
-      const url = ''; // placeholder
-
       const user = await getCurrentUser();
       if (!user) {
         setStatus('error');
         return;
       }
 
+      const text = intent.text ?? undefined;
+      const url = intent.url ?? undefined;
+      const imageUri = intent.images?.[0] ?? intent.files?.[0] ?? undefined;
+
       const result = await processSharedContent(user.id, {
         text,
         url,
+        imageUri,
         sourceApp: 'share-extension',
       });
 
@@ -51,40 +54,45 @@ export default function ShareExtension() {
 
       // Auto-dismiss after brief feedback
       setTimeout(() => {
-        // close(); // expo-share-extension dismiss
+        close();
       }, CONFIG.shareExtension.dismissDelayMs);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Share extension error:', err);
       setStatus('error');
+
+      // Still dismiss on error after a delay
+      setTimeout(() => {
+        close();
+      }, 1500);
     }
   }
 
   return (
-    <View style={styles.container}>
+    <RNView style={styles.container}>
       {status === 'loading' && (
         <>
           <ActivityIndicator size="small" color="#6366F1" />
-          <Text style={styles.text}>Saving to Ada...</Text>
+          <RNText style={styles.text}>Saving to Ada...</RNText>
         </>
       )}
       {status === 'saved' && (
         <>
-          <Text style={styles.check}>✓</Text>
-          <Text style={styles.text}>Saved</Text>
+          <RNText style={styles.check}>✓</RNText>
+          <RNText style={styles.text}>Saved</RNText>
           {categoryHint ? (
-            <Text style={styles.hint}>→ {categoryHint}</Text>
+            <RNText style={styles.hint}>→ {categoryHint}</RNText>
           ) : null}
         </>
       )}
       {status === 'error' && (
         <>
-          <Text style={styles.errorIcon}>✗</Text>
-          <Text style={styles.text}>
-            Could not save. Please try again.
-          </Text>
+          <RNText style={styles.errorIcon}>✗</RNText>
+          <RNText style={styles.text}>
+            Could not save. Open Ada to sign in.
+          </RNText>
         </>
       )}
-    </View>
+    </RNView>
   );
 }
 
