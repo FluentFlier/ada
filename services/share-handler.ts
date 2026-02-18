@@ -44,7 +44,30 @@ export async function processSharedContent(
   userId: string,
   input: ShareInput,
 ): Promise<ShareResult> {
-  const { type, content } = detectContentType(input);
+  let { type, content } = detectContentType(input);
+
+  // ── Input validation ──────────────────────────────────────────────
+  // Strip null bytes and control characters (keep newlines \n, tabs \t, \r)
+  content = content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+
+  // Truncate excessively long text (share extension has 120MB memory limit)
+  const MAX_CONTENT_LENGTH = 50_000;
+  if (content.length > MAX_CONTENT_LENGTH) {
+    console.warn(
+      `Shared content truncated from ${content.length} to ${MAX_CONTENT_LENGTH} chars`,
+    );
+    content = content.slice(0, MAX_CONTENT_LENGTH);
+  }
+
+  // Validate URLs — fall back to text if malformed
+  if (type === 'link') {
+    try {
+      new URL(content);
+    } catch (_urlErr: unknown) {
+      console.warn('Invalid URL shared, treating as text:', content.slice(0, 100));
+      type = 'text' as ContentType;
+    }
+  }
 
   // Instant heuristic — gives user feedback in share extension
   const heuristicHint = classifyHeuristic({ content, type });
@@ -75,7 +98,9 @@ export async function processSharedContent(
   }
 
   // Fire and forget — don't wait for classification
-  triggerClassify(item.id).catch(() => {});
+  triggerClassify(item.id).catch((err: unknown) => {
+    console.warn('triggerClassify fire-and-forget failed:', err);
+  });
 
   return { item, heuristicHint };
 }

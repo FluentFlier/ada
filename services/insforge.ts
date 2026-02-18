@@ -61,7 +61,7 @@ async function authPost<T>(path: string, body: Record<string, unknown>): Promise
 
   if (!res.ok) {
     const msg = json?.message ?? json?.error ?? `HTTP ${res.status}`;
-    throw new AuthError(msg, json);
+    throw new AuthError(msg, json, res.status);
   }
 
   return json as T;
@@ -79,7 +79,7 @@ async function authGet<T>(path: string, token: string): Promise<T> {
   const json = await res.json();
 
   if (!res.ok) {
-    throw new AuthError(json?.message ?? `HTTP ${res.status}`, json);
+    throw new AuthError(json?.message ?? `HTTP ${res.status}`, json, res.status);
   }
 
   return json as T;
@@ -158,8 +158,14 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     // Restore token on SDK for this session
     setToken(token);
     return data;
-  } catch {
-    // Token expired — try dev auto-login in dev, null in production
+  } catch (err: unknown) {
+    if (err instanceof AuthError && err.statusCode === 401) {
+      console.warn('Token expired, cleared');
+      await clearToken();
+      return null;
+    }
+    // Non-401 error — try dev auto-login in dev, null in production
+    console.warn('getCurrentUser failed:', err);
     if (__DEV__) return devAutoLogin();
     await clearToken();
     return null;
@@ -175,7 +181,8 @@ async function devAutoLogin(): Promise<AuthUser | null> {
     });
     await saveToken(data.accessToken);
     return data.user;
-  } catch {
+  } catch (err: unknown) {
+    console.warn('Dev auto-login failed:', err);
     return null;
   }
 }
@@ -467,8 +474,8 @@ export function subscribeToItems(
 export function disconnectRealtime() {
   try {
     insforge.realtime.disconnect?.();
-  } catch {
-    // Ignore — may not be connected
+  } catch (err: unknown) {
+    console.warn('Realtime disconnect failed (may not be connected):', err);
   }
 }
 
@@ -484,7 +491,14 @@ class AdaError extends Error {
   }
 }
 
-export class AuthError extends AdaError {}
+export class AuthError extends AdaError {
+  public readonly statusCode: number | undefined;
+
+  constructor(message: string, cause?: unknown, statusCode?: number) {
+    super(message, cause);
+    this.statusCode = statusCode;
+  }
+}
 export class DatabaseError extends AdaError {}
 export class StorageError extends AdaError {}
 export class FunctionError extends AdaError {}
