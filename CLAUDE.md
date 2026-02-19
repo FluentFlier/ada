@@ -227,7 +227,7 @@ Tables are created via InsForge MCP. Schema for reference:
 | user_id | UUID FK → auth.users | required |
 | item_id | UUID FK → items | required |
 | type | TEXT | action type enum |
-| status | TEXT | 'suggested' \| 'approved' \| 'completed' \| 'dismissed' |
+| status | TEXT | 'suggested' \| 'approved' \| 'completed' \| 'dismissed' \| 'failed' |
 | action_data | JSONB | action-specific payload |
 | result | JSONB | nullable, execution result |
 | created_at | TIMESTAMPTZ | auto |
@@ -367,6 +367,7 @@ ada/
 EXPO_PUBLIC_INSFORGE_URL=https://your-app.region.insforge.app
 EXPO_PUBLIC_INSFORGE_ANON_KEY=your-anon-key
 # Edge function secrets (set via InsForge Secret Manager):
+INSFORGE_BASE_URL=https://your-app.region.insforge.app
 GEMINI_API_KEY=AIza...
 JINA_API_KEY=jina_...  # Optional, keyless works for <1000 RPD
 ```
