@@ -145,6 +145,7 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
 
   reclassify: async (itemId: string) => {
     const prev = get().items;
+    const item = prev.find((i) => i.id === itemId);
 
     // Optimistic: mark as pending
     set((state) => ({
@@ -161,7 +162,11 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
         category: null,
         confidence: null,
       });
-      await triggerClassify(itemId);
+      await triggerClassify(itemId, item ? {
+        type: item.type,
+        raw_content: item.raw_content,
+        user_id: item.user_id,
+      } : undefined);
     } catch (err) {
       set({ items: prev });
       throw err;

@@ -259,7 +259,7 @@ describe('items store', () => {
         category: null,
         confidence: null,
       });
-      expect(mockTriggerClassify).toHaveBeenCalledWith('r1');
+      expect(mockTriggerClassify).toHaveBeenCalledWith('r1', undefined);
     });
   });
 
