@@ -12,21 +12,23 @@
  * Token is persisted in expo-secure-store across app restarts.
  */
 
-import { createClient } from '@insforge/sdk';
 import * as SecureStore from 'expo-secure-store';
 import { CONFIG } from '@/constants/config';
 import type { Item } from '@/types/item';
+import {
+  insforge,
+  AuthError,
+  StorageError,
+  FunctionError,
+} from './insforge-client';
+
+export { insforge, AuthError, DatabaseError, StorageError, FunctionError } from './insforge-client';
 
 // ─── Client Initialization ───────────────────────────────────────────
 
 const BASE_URL = CONFIG.insforge.url;
 const ANON_KEY = CONFIG.insforge.anonKey;
 const TOKEN_KEY = 'insforge_access_token';
-
-export const insforge = createClient({
-  baseUrl: BASE_URL,
-  anonKey: ANON_KEY,
-});
 
 /** Set token on SDK so database/storage/functions include Authorization. */
 function setToken(token: string | null) {
@@ -173,10 +175,18 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
 /** DEV ONLY: auto-login with test user to skip auth during development. */
 async function devAutoLogin(): Promise<AuthUser | null> {
+  const email = process.env.EXPO_PUBLIC_DEV_TEST_EMAIL;
+  const password = process.env.EXPO_PUBLIC_DEV_TEST_PASSWORD;
+
+  if (!email || !password) {
+    console.warn('Dev auto-login skipped: set EXPO_PUBLIC_DEV_TEST_EMAIL and EXPO_PUBLIC_DEV_TEST_PASSWORD in .env');
+    return null;
+  }
+
   try {
     const data = await authPost<SignInResponse>('/api/auth/sessions', {
-      email: 'ada.test@example.com',
-      password: 'AdaTest12345',
+      email,
+      password,
     });
     await saveToken(data.accessToken);
     return data.user;
@@ -320,30 +330,6 @@ export function disconnectRealtime() {
     console.warn('Realtime disconnect failed (may not be connected):', err);
   }
 }
-
-// ─── Error Types ─────────────────────────────────────────────────────
-
-class AdaError extends Error {
-  public readonly cause: unknown;
-
-  constructor(message: string, cause?: unknown) {
-    super(message);
-    this.name = this.constructor.name;
-    this.cause = cause;
-  }
-}
-
-export class AuthError extends AdaError {
-  public readonly statusCode: number | undefined;
-
-  constructor(message: string, cause?: unknown, statusCode?: number) {
-    super(message, cause);
-    this.statusCode = statusCode;
-  }
-}
-export class DatabaseError extends AdaError {}
-export class StorageError extends AdaError {}
-export class FunctionError extends AdaError {}
 
 // ─── Re-exports ─────────────────────────────────────────────────────
 // Item CRUD and action queries live in insforge-queries.ts but are

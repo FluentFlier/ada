@@ -6,7 +6,7 @@
  * continue importing from '@/services/insforge'.
  */
 
-import { insforge, DatabaseError } from './insforge';
+import { insforge, DatabaseError } from './insforge-client';
 import type { Item, RawCapture, ItemStatus, Category } from '@/types/item';
 import type { Action, ActionStatus } from '@/types/action';
 
