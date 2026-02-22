@@ -283,7 +283,7 @@ async function classifyWithAI(
   }
 
   const completion = await client.ai.chat.completions.create({
-    model: 'openai/gpt-4o-mini',
+    model: 'google/gemini-2.5-flash-lite',
     messages: [{ role: 'user', content: messageContent }],
     temperature: 0.1,
   });

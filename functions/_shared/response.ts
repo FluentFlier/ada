@@ -3,7 +3,7 @@
  */
 
 export const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': 'https://a4vmjw99.us-west.insforge.app',
+  'Access-Control-Allow-Origin': Deno.env.get('INSFORGE_BASE_URL') ?? '',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };

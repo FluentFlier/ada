@@ -9,15 +9,15 @@ export const CONFIG = {
   },
 
   ai: {
-    classifyModel: 'openai/gpt-4o-mini',
-    summarizeModel: 'anthropic/claude-sonnet-4.5',
+    classifyModel: 'google/gemini-2.5-flash-lite',
+    summarizeModel: 'google/gemini-2.5-flash',
     classifyTimeoutMs: 10_000,
     summarizeTimeoutMs: 15_000,
   },
 
   jina: {
     readerUrl: 'https://r.jina.ai',
-    timeoutMs: 8_000,
+    timeoutMs: 5_000,
   },
 
   shareExtension: {

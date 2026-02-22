@@ -60,7 +60,7 @@ export default async function handler(
 
     // 3. Summarize via AI Gateway (claude-sonnet-4.5)
     const completion = await client.ai.chat.completions.create({
-      model: 'anthropic/claude-sonnet-4.5',
+      model: 'google/gemini-2.5-flash',
       messages: [
         {
           role: 'user',
